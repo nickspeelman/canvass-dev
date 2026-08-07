@@ -1,40 +1,29 @@
-TOUCH INSTRUMENT — V1
-=====================
+TOUCH INSTRUMENT — v1.2
 
-Run it
-------
-Extract the folder and open index.html in Chrome.
-No server, build step, npm install, or internet connection is required.
+Open index.html in Chrome. No server or build step is required.
 
-Best experience
----------------
-Use a touchscreen Chromebook/tablet in landscape orientation and tap “Full screen”.
-The canvas uses Pointer Events and supports simultaneous touches.
+BASELINE
+- True multi-touch pointer drawing
+- Red / yellow / blue / black / white
+- Small / medium / large
+- Local persistence
+- One-tap Save Image button during drawing
+- Finish dialog with PNG and session JSON export
 
-Controls
---------
-Behaviors can be combined freely:
+COMPOSABLE BEHAVIORS
+- Cycle: shared continuously advancing hue
+- Connect: draws between simultaneous touches
+- Echo: delayed repetitions
+- Scatter: emits particles along movement
+- Pull: attracts particles toward active touches
+- Mirror: reflects marks horizontally
+- Radial: six-fold rotational replication around the canvas center
+- Drift: strokes keep traveling after the finger moves
+- Orbit: with 2+ touches, creates rotating copies around the other active touches
+- Repel: pushes particles away from active touches
 
-Cycle   Shared hue advances as marks are made.
-Connect Paints lines between simultaneous touch points.
-Echo    Repeats marks after short delays.
-Scatter Emits moving secondary marks from strokes.
-Pull    Active touches attract Scatter particles.
-Mirror  Duplicates marks across the vertical axis.
-
-Colors: red, yellow, blue, black, white.
-Sizes: small, medium, large.
-
-Finish
-------
-Download image: saves the current canvas as PNG.
-Download session: saves normalized touch/configuration events as JSON.
-Start again: clears the canvas and begins a fresh session record.
-
-Persistence
------------
-The current drawing is saved in browser localStorage and restored on reload.
-
-Notes
------
-This is intentionally a v1 behavior sandbox. There is no backend or upload/contribution flow yet.
+NOTES
+- Pull and Repel act on Scatter and Drift particles. If both are enabled, their forces cancel.
+- Orbit is intentionally multi-touch: it has no effect with a single active touch.
+- Radial composes with Mirror, so enabling both can produce up to twelve transformed copies.
+- All behavior toggles and touch events are recorded in the exported session JSON.

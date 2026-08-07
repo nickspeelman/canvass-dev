@@ -12,11 +12,12 @@
       color: '#e53935',
       size: 16,
       hue: 0,
-      behaviors: { cycle: true, connect: false, echo: false, scatter: false, pull: false, mirror: false }
+      behaviors: { cycle: true, connect: false, echo: false, scatter: false, pull: false, mirror: false, radial: false, drift: false, orbit: false, repel: false }
     },
     activeTouches: new Map(),
     particles: [],
     echoQueue: [],
+    orbitPhase: 0,
     session: null,
     cssWidth: 1,
     cssHeight: 1,
@@ -35,7 +36,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 1,
-      engineVersion: '1.0.0',
+      engineVersion: '1.2.0',
       startedAt: new Date().toISOString(),
       initialCanvas: { width: app.cssWidth, height: app.cssHeight },
       events: []
@@ -177,6 +178,8 @@
       }
 
       B.scatterFromSegment(app, t, distance);
+      B.driftFromSegment(app, t, distance);
+      B.orbitFromSegment(app, t, distance);
       record('move', { id: e.pointerId, ...normalizedPoint(t.x, t.y) });
       saveSoon();
     }
@@ -269,6 +272,7 @@
     paint.restore();
     app.particles = [];
     app.echoQueue = [];
+    app.orbitPhase = 0;
     app.dirty = false;
     localStorage.removeItem('touch-instrument-image-v1');
     hint.classList.remove('hidden');
@@ -296,9 +300,21 @@
     setTimeout(() => URL.revokeObjectURL(url), 500);
   }
 
+  function saveImageDownload(source = 'save-button') {
+    saveDrawing();
+    paintCanvas.toBlob(blob => {
+      if (!blob) return;
+      downloadBlob(blob, `touch-instrument-${timestampName()}.png`);
+      record('download-image', { source });
+    }, 'image/png');
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', () => {
+    saveImageDownload('save-button');
+  });
+
   document.getElementById('downloadBtn').addEventListener('click', () => {
-    paintCanvas.toBlob(blob => blob && downloadBlob(blob, `touch-instrument-${timestampName()}.png`), 'image/png');
-    record('download-image');
+    saveImageDownload('finish-dialog');
   });
 
   document.getElementById('downloadSessionBtn').addEventListener('click', () => {
