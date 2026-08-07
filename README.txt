@@ -1,4 +1,4 @@
-TOUCH INSTRUMENT — v1.2
+TOUCH INSTRUMENT — v1.3
 
 Open index.html in Chrome. No server or build step is required.
 
@@ -27,3 +27,5 @@ NOTES
 - Orbit is intentionally multi-touch: it has no effect with a single active touch.
 - Radial composes with Mirror, so enabling both can produce up to twelve transformed copies.
 - All behavior toggles and touch events are recorded in the exported session JSON.
+
+Canvas Size (v1.3): choose Responsive, common aspect-ratio presets, or custom pixel dimensions. Fixed sizes export PNGs at the selected exact dimensions. Existing artwork can be preserved when changing sizes.

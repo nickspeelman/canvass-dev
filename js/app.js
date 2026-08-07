@@ -14,6 +14,7 @@
       hue: 0,
       behaviors: { cycle: true, connect: false, echo: false, scatter: false, pull: false, mirror: false, radial: false, drift: false, orbit: false, repel: false }
     },
+    canvasSpec: { mode: 'responsive', width: null, height: null },
     activeTouches: new Map(),
     particles: [],
     echoQueue: [],
@@ -36,9 +37,9 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 1,
-      engineVersion: '1.2.0',
+      engineVersion: '1.3.0',
       startedAt: new Date().toISOString(),
-      initialCanvas: { width: app.cssWidth, height: app.cssHeight },
+      initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
       events: []
     };
     record('config', { state: snapshotState() });
@@ -48,7 +49,8 @@
     return {
       color: app.state.color,
       size: app.state.size,
-      behaviors: { ...app.state.behaviors }
+      behaviors: { ...app.state.behaviors },
+      canvas: { ...app.canvasSpec }
     };
   }
 
@@ -67,24 +69,45 @@
     return { x: +(x / app.cssWidth).toFixed(5), y: +(y / app.cssHeight).toFixed(5) };
   }
 
-  function resizeCanvases() {
+  function canvasDisplayRect() {
     const rect = stage.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
+    if (!rect.width || !rect.height) return null;
+    if (app.canvasSpec.mode === 'responsive' || !app.canvasSpec.width || !app.canvasSpec.height) {
+      return { width: rect.width, height: rect.height, left: 0, top: 0 };
+    }
+    const targetAspect = app.canvasSpec.width / app.canvasSpec.height;
+    const stageAspect = rect.width / rect.height;
+    let width, height;
+    if (targetAspect > stageAspect) {
+      width = rect.width;
+      height = width / targetAspect;
+    } else {
+      height = rect.height;
+      width = height * targetAspect;
+    }
+    return { width, height, left: (rect.width - width) / 2, top: (rect.height - height) / 2 };
+  }
+
+  function resizeCanvases({ preserve = true } = {}) {
+    const display = canvasDisplayRect();
+    if (!display) return;
 
     const old = document.createElement('canvas');
     old.width = paintCanvas.width;
     old.height = paintCanvas.height;
-    if (old.width && old.height) old.getContext('2d').drawImage(paintCanvas, 0, 0);
+    if (old.width && old.height && preserve) old.getContext('2d').drawImage(paintCanvas, 0, 0);
 
-    app.cssWidth = rect.width;
-    app.cssHeight = rect.height;
+    app.cssWidth = display.width;
+    app.cssHeight = display.height;
     app.dpr = Math.min(2, window.devicePixelRatio || 1);
 
     for (const c of [paintCanvas, liveCanvas]) {
-      c.width = Math.round(rect.width * app.dpr);
-      c.height = Math.round(rect.height * app.dpr);
-      c.style.width = `${rect.width}px`;
-      c.style.height = `${rect.height}px`;
+      c.width = Math.max(1, Math.round(display.width * app.dpr));
+      c.height = Math.max(1, Math.round(display.height * app.dpr));
+      c.style.width = `${display.width}px`;
+      c.style.height = `${display.height}px`;
+      c.style.left = `${display.left}px`;
+      c.style.top = `${display.top}px`;
     }
 
     paint.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
@@ -93,14 +116,14 @@
     live.lineCap = live.lineJoin = 'round';
 
     paint.fillStyle = '#fff';
-    paint.fillRect(0, 0, rect.width, rect.height);
-    if (old.width && old.height) {
+    paint.fillRect(0, 0, display.width, display.height);
+    if (old.width && old.height && preserve) {
       paint.save();
       paint.setTransform(1, 0, 0, 1, 0, 0);
       paint.drawImage(old, 0, 0, old.width, old.height, 0, 0, paintCanvas.width, paintCanvas.height);
       paint.restore();
+      app.dirty = true;
     }
-    restoreSavedDrawing(false);
   }
 
   function drawMark(ctx, mark, appRef) {
@@ -123,8 +146,10 @@
   }
 
   function pointFromEvent(e) {
-    const r = stage.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const r = paintCanvas.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    return { x, y, inside: x >= 0 && y >= 0 && x <= r.width && y <= r.height };
   }
 
   function pointerDown(e) {
@@ -132,6 +157,7 @@
     e.preventDefault();
     stage.setPointerCapture?.(e.pointerId);
     const p = pointFromEvent(e);
+    if (!p.inside) return;
     const now = performance.now();
     const touch = { id: e.pointerId, x: p.x, y: p.y, px: p.x, py: p.y, time: now, ptime: now, speed: 0 };
     app.activeTouches.set(e.pointerId, touch);
@@ -288,7 +314,7 @@
   const previewImage = document.getElementById('previewImage');
   document.getElementById('finishBtn').addEventListener('click', () => {
     saveDrawing();
-    previewImage.src = paintCanvas.toDataURL('image/png');
+    previewImage.src = exportCanvas().toDataURL('image/png');
     finishDialog.showModal();
     record('finish');
   });
@@ -300,9 +326,21 @@
     setTimeout(() => URL.revokeObjectURL(url), 500);
   }
 
+  function exportCanvas() {
+    if (app.canvasSpec.mode === 'responsive' || !app.canvasSpec.width || !app.canvasSpec.height) return paintCanvas;
+    const out = document.createElement('canvas');
+    out.width = app.canvasSpec.width;
+    out.height = app.canvasSpec.height;
+    const ctx = out.getContext('2d', { alpha: false });
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(paintCanvas, 0, 0, out.width, out.height);
+    return out;
+  }
+
   function saveImageDownload(source = 'save-button') {
     saveDrawing();
-    paintCanvas.toBlob(blob => {
+    exportCanvas().toBlob(blob => {
       if (!blob) return;
       downloadBlob(blob, `touch-instrument-${timestampName()}.png`);
       record('download-image', { source });
@@ -328,6 +366,60 @@
     clearCanvas(true);
   });
 
+  const canvasDialog = document.getElementById('canvasDialog');
+  const canvasPreset = document.getElementById('canvasPreset');
+  const customSizeFields = document.getElementById('customSizeFields');
+  const canvasWidthInput = document.getElementById('canvasWidthInput');
+  const canvasHeightInput = document.getElementById('canvasHeightInput');
+  const preserveCanvasCheck = document.getElementById('preserveCanvasCheck');
+
+  function presetValueForSpec() {
+    if (app.canvasSpec.mode === 'responsive') return 'responsive';
+    const value = `${app.canvasSpec.width}x${app.canvasSpec.height}`;
+    return [...canvasPreset.options].some(o => o.value === value) ? value : 'custom';
+  }
+
+  document.getElementById('canvasSizeBtn').addEventListener('click', () => {
+    canvasPreset.value = presetValueForSpec();
+    canvasWidthInput.value = app.canvasSpec.width || 1600;
+    canvasHeightInput.value = app.canvasSpec.height || 1200;
+    customSizeFields.classList.toggle('hidden', canvasPreset.value !== 'custom');
+    canvasDialog.showModal();
+  });
+
+  canvasPreset.addEventListener('change', () => {
+    customSizeFields.classList.toggle('hidden', canvasPreset.value !== 'custom');
+  });
+
+  document.getElementById('applyCanvasSizeBtn').addEventListener('click', () => {
+    const preset = canvasPreset.value;
+    let spec;
+    if (preset === 'responsive') {
+      spec = { mode: 'responsive', width: null, height: null };
+    } else {
+      let width, height;
+      if (preset === 'custom') {
+        width = Math.max(320, Math.min(8192, Math.round(Number(canvasWidthInput.value) || 1600)));
+        height = Math.max(320, Math.min(8192, Math.round(Number(canvasHeightInput.value) || 1200)));
+      } else {
+        [width, height] = preset.split('x').map(Number);
+      }
+      spec = { mode: 'fixed', width, height };
+    }
+    const preserve = preserveCanvasCheck.checked;
+    app.canvasSpec = spec;
+    resizeCanvases({ preserve });
+    if (!preserve) {
+      app.particles = [];
+      app.echoQueue = [];
+      app.dirty = false;
+      hint.classList.remove('hidden');
+    }
+    record('canvas-size', { spec: { ...spec }, preserve });
+    saveDrawing();
+    canvasDialog.close();
+  });
+
   document.getElementById('fullscreenBtn').addEventListener('click', async () => {
     try {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -346,7 +438,10 @@
   }
 
   function saveDrawing() {
-    try { localStorage.setItem('touch-instrument-image-v1', paintCanvas.toDataURL('image/png')); } catch (_) {}
+    try {
+      localStorage.setItem('touch-instrument-image-v1', paintCanvas.toDataURL('image/png'));
+      localStorage.setItem('touch-instrument-canvas-spec-v1', JSON.stringify(app.canvasSpec));
+    } catch (_) {}
   }
 
   function restoreSavedDrawing(force = true) {
@@ -361,11 +456,16 @@
     img.src = data;
   }
 
-  window.addEventListener('resize', () => { resizeCanvases(); });
+  window.addEventListener('resize', () => { resizeCanvases({ preserve: true }); });
   window.addEventListener('beforeunload', saveDrawing);
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveDrawing(); });
 
-  resizeCanvases();
+  try {
+    const savedSpec = JSON.parse(localStorage.getItem('touch-instrument-canvas-spec-v1') || 'null');
+    if (savedSpec && (savedSpec.mode === 'responsive' || savedSpec.mode === 'fixed')) app.canvasSpec = savedSpec;
+  } catch (_) {}
+
+  resizeCanvases({ preserve: false });
   restoreSavedDrawing(true);
   sessionPerfStart = performance.now();
   beginSession();

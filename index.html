@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#111111" />
-  <title>Touch Instrument — v1.2</title>
+  <title>Touch Instrument — v1.3</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -46,6 +46,7 @@
 
         <div class="actions">
           <button id="fullscreenBtn" class="utility">Full screen</button>
+          <button id="canvasSizeBtn" class="utility">Canvas size</button>
           <button id="saveBtn" class="utility">Save image</button>
           <button id="clearBtn" class="utility">Clear</button>
           <button id="finishBtn" class="utility primary">Finish</button>
@@ -53,6 +54,34 @@
       </div>
     </section>
   </main>
+
+
+  <dialog id="canvasDialog" class="settings-dialog">
+    <form method="dialog" class="settings-card" id="canvasForm">
+      <h2>Canvas size</h2>
+      <label class="field">
+        <span>Preset</span>
+        <select id="canvasPreset">
+          <option value="responsive">Responsive — fill screen</option>
+          <option value="1200x1200">Square — 1200 × 1200</option>
+          <option value="1600x1200">Landscape 4:3 — 1600 × 1200</option>
+          <option value="1920x1080">Widescreen 16:9 — 1920 × 1080</option>
+          <option value="1200x1600">Portrait 3:4 — 1200 × 1600</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </label>
+      <div id="customSizeFields" class="dimension-fields hidden">
+        <label class="field"><span>Width (px)</span><input id="canvasWidthInput" type="number" min="320" max="8192" step="1" value="1600" inputmode="numeric" /></label>
+        <label class="field"><span>Height (px)</span><input id="canvasHeightInput" type="number" min="320" max="8192" step="1" value="1200" inputmode="numeric" /></label>
+      </div>
+      <label class="check-row"><input id="preserveCanvasCheck" type="checkbox" checked /> <span>Preserve existing artwork when resizing</span></label>
+      <p class="settings-note">Fixed sizes determine both the canvas shape and the exact PNG dimensions. Responsive mode follows the available screen area.</p>
+      <div class="settings-actions">
+        <button value="cancel" class="utility">Cancel</button>
+        <button id="applyCanvasSizeBtn" type="button" class="utility primary">Apply</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="finishDialog" class="finish-dialog">
     <form method="dialog" class="finish-card">
