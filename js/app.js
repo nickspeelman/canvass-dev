@@ -12,7 +12,7 @@
       color: '#e53935',
       size: 16,
       hue: 0,
-      behaviors: { cycle: true, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false }
+      behaviors: { cycle: true, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false }
     },
     canvasSpec: { mode: 'responsive', width: null, height: null },
     activeTouches: new Map(),
@@ -27,7 +27,10 @@
     lastFrame: performance.now(),
 
     paintMark(mark, allowEcho = true) {
-      for (const m of B.transformMarks(this, mark)) drawMark(paint, m, this);
+      for (const m of B.transformMarks(this, mark)) {
+        drawMark(paint, m, this);
+        B.addBleedFromMark(this, m);
+      }
       if (allowEcho) B.scheduleEchoes(this, mark);
       this.dirty = true;
     }
@@ -37,7 +40,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 1,
-      engineVersion: '1.4.0',
+      engineVersion: '1.5.0',
       startedAt: new Date().toISOString(),
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
       events: []

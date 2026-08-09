@@ -19,6 +19,43 @@
     return { ...mark, x: p.x, y: p.y };
   }
 
+
+  function fractalizeLine(mark) {
+    const out = [mark];
+    const dx = mark.x2 - mark.x1;
+    const dy = mark.y2 - mark.y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 2) return out;
+
+    const baseAngle = Math.atan2(dy, dx);
+    const branchAngle = 0.62;
+    const gen1Len = len * 0.58;
+    const gen2Len = len * 0.32;
+
+    for (const sign of [-1, 1]) {
+      const a1 = baseAngle + sign * branchAngle;
+      const x3 = mark.x2 + Math.cos(a1) * gen1Len;
+      const y3 = mark.y2 + Math.sin(a1) * gen1Len;
+      out.push({ ...mark, x1: mark.x2, y1: mark.y2, x2: x3, y2: y3, width: Math.max(1, (mark.width || 1) * 0.68), noFractal:true });
+
+      for (const sign2 of [-1, 1]) {
+        const a2 = a1 + sign2 * branchAngle * 0.82;
+        out.push({ ...mark, x1: x3, y1: y3, x2: x3 + Math.cos(a2) * gen2Len, y2: y3 + Math.sin(a2) * gen2Len, width: Math.max(1, (mark.width || 1) * 0.44), noFractal:true });
+      }
+    }
+    return out;
+  }
+
+  function fractalizeDab(mark) {
+    const out = [mark];
+    const r = Math.max(4, (mark.width || 8) * 0.95);
+    for (let i = 0; i < 3; i++) {
+      const a = -Math.PI / 2 + i * TAU / 3;
+      out.push({ ...mark, x: mark.x + Math.cos(a) * r, y: mark.y + Math.sin(a) * r, width: Math.max(1.5, (mark.width || 8) * 0.48), noFractal:true });
+    }
+    return out;
+  }
+
   function offsetMark(mark, w, h) {
     // Deterministic point reflection through the canvas center.
     if (mark.type === 'line') {
@@ -66,6 +103,13 @@
       // Flow deforms the coordinate field rather than adding decorative particles.
       if (app.state.behaviors.flow) marks = marks.map(base => flowMark(base, app));
 
+      // Fractal expands one gesture into a shallow branching family.
+      if (app.state.behaviors.fractal && !mark.noFractal) {
+        const expanded = [];
+        for (const base of marks) expanded.push(...(base.type === 'line' ? fractalizeLine(base) : fractalizeDab(base)));
+        marks = expanded;
+      }
+
       // Offset replaces the source location with its point-reflected location.
       if (app.state.behaviors.offset) marks = marks.map(base => offsetMark(base, app.cssWidth, app.cssHeight));
 
@@ -95,6 +139,29 @@
       if (!app.state.behaviors.echo || mark.noEcho) return;
       const now = performance.now();
       for (const delay of this.echoDelays) app.echoQueue.push({ at: now + delay, mark: { ...mark, echoed: true } });
+    },
+
+    addBleedFromMark(app, mark) {
+      if (!app.state.behaviors.bleed || mark.noBleed) return;
+      if (app.particles.length > 520) return;
+
+      const baseColor = app.state.behaviors.cycle ? null : (mark.color || app.state.color);
+      if (mark.type === 'line') {
+        const dx = mark.x2 - mark.x1, dy = mark.y2 - mark.y1;
+        const len = Math.hypot(dx, dy);
+        const samples = Math.min(4, Math.max(1, Math.ceil(len / 24)));
+        for (let i = 0; i < samples; i++) {
+          const t = samples === 1 ? 0.5 : i / (samples - 1);
+          const x = mark.x1 + dx * t, y = mark.y1 + dy * t;
+          app.particles.push({ x, y, vx:0, vy:0, life:1.15 + Math.random()*1.05, age:0,
+            radius:Math.max(5, (mark.width || app.state.size) * (0.55 + Math.random()*0.35)),
+            color:baseColor, lastX:x, lastY:y, kind:'bleed', seed:Math.random()*1000 });
+        }
+      } else {
+        app.particles.push({ x:mark.x, y:mark.y, vx:0, vy:0, life:1.25 + Math.random()*1.0, age:0,
+          radius:Math.max(5, (mark.width || app.state.size) * (0.6 + Math.random()*0.35)),
+          color:baseColor, lastX:mark.x, lastY:mark.y, kind:'bleed', seed:Math.random()*1000 });
+      }
     },
 
     scatterFromSegment(app, touch, distance) {
@@ -166,6 +233,21 @@
       for (const p of app.particles) {
         p.age+=dt;
         if (p.age>=p.life) continue;
+
+        if (p.kind==='bleed') {
+          const progress=p.age/p.life;
+          const spread=p.radius*(0.45+progress*2.8);
+          const deposits=5;
+          for (let i=0;i<deposits;i++) {
+            const a=(p.seed*0.017+i*2.399+progress*4.2)%TAU;
+            const radial=spread*Math.pow((i+1)/deposits,0.78)*(0.72+0.25*Math.sin(p.seed+i*1.7+progress*6));
+            this.advanceHue(app,0.35,0.035);
+            app.paintMark({type:'dab',x:p.x+Math.cos(a)*radial,y:p.y+Math.sin(a)*radial,
+              width:Math.max(1.2,p.radius*(0.34+0.18*(1-progress))),color:p.color,noEcho:true,noBleed:true,noFractal:true,
+              alpha:Math.max(0.018,0.075*(1-progress))},false);
+          }
+          keep.push(p); continue;
+        }
 
         if (p.kind==='bloom') {
           const progress=p.age/p.life;

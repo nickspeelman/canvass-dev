@@ -33,3 +33,6 @@ NOTES
 - Bloom and Spray can also be transformed by Flow/Offset/Radial/Mirror because they emit ordinary marks through the same pipeline.
 - Orbit is intentionally multi-touch: it has no effect with a single active touch.
 - All behavior toggles and touch events are recorded in the exported session JSON.
+
+
+v1.5 adds composable Fractal branching and watercolor-like Bleed behaviors.
