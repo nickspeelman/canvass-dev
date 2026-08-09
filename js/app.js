@@ -42,7 +42,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 1,
-      engineVersion: '1.6.0',
+      engineVersion: '1.8.0',
       startedAt: new Date().toISOString(),
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
       events: []
@@ -414,6 +414,176 @@
     });
   });
 
+  const gifRecordBtn = document.getElementById('gifRecordBtn');
+  const gifDialog = document.getElementById('gifDialog');
+  const gifPreview = document.getElementById('gifPreview');
+  const gifRenderStatus = document.getElementById('gifRenderStatus');
+  const gifProgressBar = document.getElementById('gifProgressBar');
+  const gifMeta = document.getElementById('gifMeta');
+  const downloadGifBtn = document.getElementById('downloadGifBtn');
+  const GIF_FRAME_DELAY = 125;
+  const GIF_MAX_DURATION = 30000;
+  const GIF_MAX_DIMENSION = 480;
+  const gifCapture = {
+    recording: false,
+    rendering: false,
+    startedAt: 0,
+    timer: null,
+    frames: [],
+    width: 0,
+    height: 0,
+    canvas: document.createElement('canvas'),
+    ctx: null,
+    blob: null,
+    url: null
+  };
+  gifCapture.ctx = gifCapture.canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+
+  function formatDuration(ms) {
+    const seconds = Math.max(0, ms) / 1000;
+    return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function clearGifResult() {
+    gifCapture.blob = null;
+    if (gifCapture.url) URL.revokeObjectURL(gifCapture.url);
+    gifCapture.url = null;
+    gifPreview.removeAttribute('src');
+    gifPreview.hidden = true;
+    downloadGifBtn.disabled = true;
+  }
+
+  function setupGifCaptureCanvas() {
+    const sourceWidth = Math.max(1, artworkCanvas.width);
+    const sourceHeight = Math.max(1, artworkCanvas.height);
+    const scale = Math.min(1, GIF_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
+    gifCapture.width = Math.max(1, Math.round(sourceWidth * scale));
+    gifCapture.height = Math.max(1, Math.round(sourceHeight * scale));
+    gifCapture.canvas.width = gifCapture.width;
+    gifCapture.canvas.height = gifCapture.height;
+  }
+
+  function captureGifFrame(force = false) {
+    if ((!gifCapture.recording && !force) || !window.CanvassGifEncoder) return;
+    if (gifCapture.frames.length >= Math.ceil(GIF_MAX_DURATION / GIF_FRAME_DELAY) + 1) return;
+    const ctx = gifCapture.ctx;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, gifCapture.width, gifCapture.height);
+    ctx.drawImage(artworkCanvas, 0, 0, artworkCanvas.width, artworkCanvas.height, 0, 0, gifCapture.width, gifCapture.height);
+    ctx.restore();
+    const imageData = ctx.getImageData(0, 0, gifCapture.width, gifCapture.height);
+    gifCapture.frames.push(window.CanvassGifEncoder.quantize(imageData));
+  }
+
+  function updateGifRecordButton() {
+    if (!gifCapture.recording) {
+      gifRecordBtn.textContent = gifCapture.rendering ? 'Rendering…' : 'Record GIF';
+      gifRecordBtn.classList.remove('recording');
+      gifRecordBtn.setAttribute('aria-pressed', 'false');
+      return;
+    }
+    const elapsed = performance.now() - gifCapture.startedAt;
+    gifRecordBtn.textContent = `Stop ${Math.min(30, Math.ceil(elapsed / 1000))}s`;
+    gifRecordBtn.classList.add('recording');
+    gifRecordBtn.setAttribute('aria-pressed', 'true');
+  }
+
+  function startGifRecording() {
+    if (gifCapture.recording || gifCapture.rendering) return;
+    if (!window.CanvassGifEncoder) {
+      alert('GIF rendering is unavailable in this browser.');
+      return;
+    }
+    clearGifResult();
+    gifCapture.frames = [];
+    setupGifCaptureCanvas();
+    gifCapture.startedAt = performance.now();
+    gifCapture.recording = true;
+    captureGifFrame();
+    updateGifRecordButton();
+    gifCapture.timer = setInterval(() => {
+      captureGifFrame();
+      updateGifRecordButton();
+      if (performance.now() - gifCapture.startedAt >= GIF_MAX_DURATION) stopGifRecording('limit');
+    }, GIF_FRAME_DELAY);
+    record('gif-start', { width: gifCapture.width, height: gifCapture.height, fps: Math.round(1000 / GIF_FRAME_DELAY) });
+  }
+
+  async function stopGifRecording(reason = 'user') {
+    if (!gifCapture.recording || gifCapture.rendering) return;
+    gifCapture.recording = false;
+    clearInterval(gifCapture.timer);
+    gifCapture.timer = null;
+    captureGifFrame(true);
+    gifCapture.rendering = true;
+    gifRecordBtn.disabled = true;
+    updateGifRecordButton();
+
+    const elapsed = performance.now() - gifCapture.startedAt;
+    gifRenderStatus.hidden = false;
+    gifRenderStatus.textContent = reason === 'limit' ? '30-second limit reached. Rendering GIF…' : 'Rendering GIF…';
+    gifProgressBar.style.width = '0%';
+    gifMeta.textContent = `${formatDuration(elapsed)} performance • ${gifCapture.frames.length} frames • ${gifCapture.width} × ${gifCapture.height}`;
+    downloadGifBtn.disabled = true;
+    if (!gifDialog.open) gifDialog.showModal();
+
+    record('gif-stop', { reason, durationMs: Math.round(elapsed), frames: gifCapture.frames.length });
+
+    try {
+      const blob = await window.CanvassGifEncoder.encode({
+        width: gifCapture.width,
+        height: gifCapture.height,
+        frames: gifCapture.frames,
+        delayMs: GIF_FRAME_DELAY,
+        repeat: 0,
+        onProgress: progress => {
+          gifProgressBar.style.width = `${Math.round(progress * 100)}%`;
+          gifRenderStatus.textContent = `Rendering GIF… ${Math.round(progress * 100)}%`;
+        }
+      });
+      gifCapture.blob = blob;
+      gifCapture.url = URL.createObjectURL(blob);
+      gifPreview.src = gifCapture.url;
+      gifPreview.hidden = false;
+      gifRenderStatus.hidden = true;
+      gifProgressBar.style.width = '100%';
+      gifMeta.textContent = `${formatDuration(elapsed)} performance • ${gifCapture.frames.length} frames • ${gifCapture.width} × ${gifCapture.height} • ${formatBytes(blob.size)}`;
+      downloadGifBtn.disabled = false;
+      record('gif-ready', { bytes: blob.size });
+    } catch (error) {
+      console.error(error);
+      gifRenderStatus.hidden = false;
+      gifRenderStatus.textContent = 'Could not render this GIF. Try a shorter performance.';
+      gifMeta.textContent = '';
+      gifProgressBar.style.width = '0%';
+    } finally {
+      gifCapture.frames = [];
+      gifCapture.rendering = false;
+      gifRecordBtn.disabled = false;
+      updateGifRecordButton();
+    }
+  }
+
+  gifRecordBtn.addEventListener('click', () => {
+    if (gifCapture.recording) stopGifRecording('user');
+    else startGifRecording();
+  });
+
+  downloadGifBtn.addEventListener('click', () => {
+    if (!gifCapture.blob) return;
+    downloadBlob(gifCapture.blob, `canvass-performance-${timestampName()}.gif`);
+    record('download-gif', { bytes: gifCapture.blob.size });
+  });
+
+  document.getElementById('closeGifBtn').addEventListener('click', () => gifDialog.close());
+
   function clearCanvas(startNew = false) {
     artwork.save();
     artwork.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
@@ -467,7 +637,7 @@
     saveDrawing();
     exportCanvas().toBlob(blob => {
       if (!blob) return;
-      downloadBlob(blob, `touch-instrument-${timestampName()}.png`);
+      downloadBlob(blob, `canvass-${timestampName()}.png`);
       record('download-image', { source });
     }, 'image/png');
   }
@@ -482,7 +652,7 @@
 
   document.getElementById('downloadSessionBtn').addEventListener('click', () => {
     const exportSession = { ...app.session, endedAt: new Date().toISOString(), finalState: snapshotState() };
-    downloadBlob(new Blob([JSON.stringify(exportSession, null, 2)], { type: 'application/json' }), `touch-instrument-${timestampName()}.json`);
+    downloadBlob(new Blob([JSON.stringify(exportSession, null, 2)], { type: 'application/json' }), `canvass-session-${timestampName()}.json`);
     record('download-session');
   });
 
@@ -598,7 +768,7 @@
   window.addEventListener('orientationchange', scheduleResize);
   window.addEventListener('beforeunload', saveDrawing);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { saveDrawing(); return; }
+    if (document.hidden) { saveDrawing(); if (gifCapture.recording) stopGifRecording('hidden'); return; }
     app.activeTouches.clear();
     app.lastFrame = performance.now();
     requestAnimationFrame(() => requestAnimationFrame(() => resizeCanvases({ preserve: true })));

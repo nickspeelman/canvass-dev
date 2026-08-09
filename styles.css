@@ -110,3 +110,17 @@ button { -webkit-tap-highlight-color: transparent; }
   .tools { flex-wrap: nowrap; }
   .behaviors { max-height: 46vh; overflow: auto; }
 }
+
+/* Performance GIF capture */
+.gif-record.recording { background: #b42318; color: #fff; border-color: #b42318; }
+.gif-record.recording::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: currentColor; animation: rec-pulse 1s steps(1) infinite; }
+@keyframes rec-pulse { 50% { opacity: .25; } }
+.gif-dialog { width: min(92vw, 760px); max-height: 92dvh; border: 0; border-radius: 18px; padding: 0; box-shadow: 0 30px 100px rgba(0,0,0,.25); }
+.gif-dialog::backdrop { background: rgba(0,0,0,.58); }
+.gif-card { padding: 18px; display: grid; gap: 12px; background: #f4f4f1; }
+.gif-preview-wrap { min-height: min(58dvh, 480px); background: #fff; border: 1px solid var(--line); overflow: hidden; display: grid; place-items: center; }
+.gif-preview-wrap img { display: block; max-width: 100%; max-height: 58dvh; object-fit: contain; }
+.gif-render-status { padding: 28px; text-align: center; font-weight: 750; color: #555; }
+.gif-progress { height: 8px; border-radius: 999px; overflow: hidden; background: #dededa; }
+.gif-progress span { display: block; width: 0%; height: 100%; background: #111; transition: width .08s linear; }
+.gif-meta { min-height: 1.4em; margin: 0; color: #666; font-size: 14px; text-align: center; }

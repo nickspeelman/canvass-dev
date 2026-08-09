@@ -1,4 +1,4 @@
-CANVASS — v1.7
+CANVASS — v1.8
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -56,3 +56,12 @@ BRANDING + PWA — v1.7
 - Service worker caches the local app shell for offline use after the first successful load
 - Navigation uses a network-first strategy so deployed updates are picked up when online, with the cached app available offline
 - PWA display allows any orientation and respects device safe areas
+
+
+PERFORMANCE GIF — v1.8
+- Record GIF captures the artwork as it develops, including stochastic/emergent effects rather than trying to reconstruct the performance later.
+- Capture runs entirely client-side; no artwork is uploaded.
+- GIFs are recorded at 8 fps with a maximum output dimension of 480 px and a 30-second ceiling to keep capture practical on touchscreen devices.
+- Recording preserves the canvas aspect ratio and GIFs loop continuously.
+- Returning to another browser tab during capture ends the recording rather than producing a long throttled/background segment.
+- A post-recording dialog renders, previews, reports dimensions/file size, and downloads the finished GIF.

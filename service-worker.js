@@ -1,10 +1,11 @@
-const CACHE_NAME = "canvass-shell-v1.7";
+const CACHE_NAME = "canvass-shell-v1.8";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
   "./js/app.js",
   "./js/behaviors.js",
+  "./js/gif-encoder.js",
   "./js/pwa.js",
   "./assets/icons/favicon.ico",
   "./assets/icons/favicon-16x16.png",
