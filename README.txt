@@ -1,6 +1,6 @@
-TOUCH INSTRUMENT — v1.6
+CANVASS — v1.7
 
-Open index.html in Chrome. No server or build step is required.
+Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
 BASELINE
 - True multi-touch pointer drawing
@@ -46,3 +46,13 @@ NOTES
 - Bloom and Spray can also be transformed by Flow/Offset/Radial/Mirror because they emit ordinary marks through the same pipeline.
 - Orbit is intentionally multi-touch: it has no effect with a single active touch.
 - All behavior toggles and touch events are recorded in the exported session JSON.
+
+
+BRANDING + PWA — v1.7
+- Product name: Canvass
+- Compact Canvass logo/wordmark added to the instrument controls
+- Browser favicon, Apple touch icon, and Android/PWA icons wired into the document
+- Web app manifest configured for standalone installation
+- Service worker caches the local app shell for offline use after the first successful load
+- Navigation uses a network-first strategy so deployed updates are picked up when online, with the cached app available offline
+- PWA display allows any orientation and respects device safe areas

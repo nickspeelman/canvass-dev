@@ -11,8 +11,19 @@
   </script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#111111" />
-  <title>Touch Instrument — v1.6</title>
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="description" content="Canvass is an experimental multitouch drawing instrument for combining gesture, color, and composable effects." />
+  <meta name="application-name" content="Canvass" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Canvass" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Canvass — Touch Drawing Instrument</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16x16.png" />
+  <link rel="shortcut icon" href="assets/icons/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="assets/icons/site.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -25,6 +36,11 @@
 
     <section class="controls" aria-label="Instrument controls">
       <div class="control-row tools">
+        <div class="brand" aria-label="Canvass">
+          <img class="brand-mark" src="assets/icons/favicon-32x32.png" width="32" height="32" alt="" />
+          <span class="brand-name">Canvass</span>
+        </div>
+
         <div class="effects-control popover-wrap">
           <button id="effectsBtn" class="utility menu-button" aria-haspopup="true" aria-expanded="false">
             Effects <span id="effectsCount" class="count-badge">1</span>
@@ -139,5 +155,6 @@
 
   <script src="js/behaviors.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/pwa.js"></script>
 </body>
 </html>

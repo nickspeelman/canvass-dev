@@ -23,6 +23,9 @@ button { -webkit-tap-highlight-color: transparent; }
 .controls { position: relative; z-index: 10; background: var(--panel); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
 .control-row { display: flex; align-items: center; gap: 7px; }
 .tools { justify-content: space-between; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: 2px; color: #111; user-select: none; }
+.brand-mark { width: 30px; height: 30px; flex: 0 0 30px; object-fit: contain; }
+.brand-name { font-size: 17px; font-weight: 850; letter-spacing: -.025em; white-space: nowrap; }
 .swatches, .sizes, .actions { display: flex; align-items: center; gap: 6px; }
 .actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .behavior, .utility, .size { min-height: 40px; border: 1px solid #bdbdb8; border-radius: 9px; background: #fff; color: var(--ink); font-weight: 700; padding: 0 11px; cursor: pointer; }
@@ -82,6 +85,8 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 @media (max-width: 520px) {
+  .brand-name { display: none; }
+  .brand { padding-right: 0; }
   .behavior, .utility, .size { min-height: 38px; border-radius: 8px; padding: 0 9px; font-size: 14px; }
   .swatch { width: 36px; height: 36px; flex-basis: 36px; }
   .size { width: 38px; }
@@ -96,6 +101,8 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
+  .brand-name { display: none; }
+  .brand-mark { width: 28px; height: 28px; flex-basis: 28px; }
   .behavior, .utility, .size { min-height: 34px; }
   .swatch { width: 34px; height: 34px; flex-basis: 34px; }
   .size { width: 36px; }
