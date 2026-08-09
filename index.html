@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
-  !-- Google tag (gtag.js) -->
+  <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-30SN02B5HP"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -13,7 +13,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#111111" />
-  <title>Touch Instrument — v1.5</title>
+  <title>Touch Instrument — v1.6</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -25,30 +25,60 @@
     </section>
 
     <section class="controls" aria-label="Instrument controls">
-      <div class="control-row behaviors" aria-label="Behaviors">
-        <button class="behavior active" data-behavior="cycle" aria-pressed="true">Cycle</button>
-        <button class="behavior" data-behavior="connect" aria-pressed="false">Connect</button>
-        <button class="behavior" data-behavior="echo" aria-pressed="false">Echo</button>
-        <button class="behavior" data-behavior="scatter" aria-pressed="false">Scatter</button>
-        <button class="behavior" data-behavior="flow" aria-pressed="false">Flow</button>
-        <button class="behavior" data-behavior="bloom" aria-pressed="false">Bloom</button>
-        <button class="behavior" data-behavior="spray" aria-pressed="false">Spray</button>
-        <button class="behavior" data-behavior="offset" aria-pressed="false">Offset</button>
-        <button class="behavior" data-behavior="mirror" aria-pressed="false">Mirror</button>
-        <button class="behavior" data-behavior="radial" aria-pressed="false">Radial</button>
-        <button class="behavior" data-behavior="drift" aria-pressed="false">Drift</button>
-        <button class="behavior" data-behavior="orbit" aria-pressed="false">Orbit</button>
-        <button class="behavior" data-behavior="fractal" aria-pressed="false">Fractal</button>
-        <button class="behavior" data-behavior="bleed" aria-pressed="false">Bleed</button>
-      </div>
-
       <div class="control-row tools">
+        <div class="effects-control popover-wrap">
+          <button id="effectsBtn" class="utility menu-button" aria-haspopup="true" aria-expanded="false">
+            Effects <span id="effectsCount" class="count-badge">1</span>
+          </button>
+          <div id="effectsMenu" class="popover effects-menu" hidden>
+            <div class="popover-heading">
+              <strong>Effects</strong>
+              <div class="bulk-actions">
+                <button id="selectAllEffectsBtn" type="button" class="text-button">Select all</button>
+                <button id="clearAllEffectsBtn" type="button" class="text-button">Unselect all</button>
+              </div>
+            </div>
+            <div class="behaviors" aria-label="Effects">
+              <button class="behavior active" data-behavior="cycle" aria-pressed="true">Cycle</button>
+              <button class="behavior" data-behavior="connect" aria-pressed="false">Connect</button>
+              <button class="behavior" data-behavior="echo" aria-pressed="false">Echo</button>
+              <button class="behavior" data-behavior="scatter" aria-pressed="false">Scatter</button>
+              <button class="behavior" data-behavior="flow" aria-pressed="false">Flow</button>
+              <button class="behavior" data-behavior="bloom" aria-pressed="false">Bloom</button>
+              <button class="behavior" data-behavior="spray" aria-pressed="false">Spray</button>
+              <button class="behavior" data-behavior="offset" aria-pressed="false">Offset</button>
+              <button class="behavior" data-behavior="mirror" aria-pressed="false">Mirror</button>
+              <button class="behavior" data-behavior="radial" aria-pressed="false">Radial</button>
+              <button class="behavior" data-behavior="drift" aria-pressed="false">Drift</button>
+              <button class="behavior" data-behavior="orbit" aria-pressed="false">Orbit</button>
+              <button class="behavior" data-behavior="fractal" aria-pressed="false">Fractal</button>
+              <button class="behavior" data-behavior="bleed" aria-pressed="false">Bleed</button>
+            </div>
+          </div>
+        </div>
+
         <div class="swatches" aria-label="Color">
           <button class="swatch active" data-color="#e53935" aria-label="Red" aria-pressed="true" style="--swatch:#e53935"></button>
           <button class="swatch" data-color="#f6c90e" aria-label="Yellow" aria-pressed="false" style="--swatch:#f6c90e"></button>
           <button class="swatch" data-color="#1e66f5" aria-label="Blue" aria-pressed="false" style="--swatch:#1e66f5"></button>
-          <button class="swatch" data-color="#111111" aria-label="Black" aria-pressed="false" style="--swatch:#111111"></button>
-          <button class="swatch white" data-color="#ffffff" aria-label="White" aria-pressed="false" style="--swatch:#ffffff"></button>
+          <div class="custom-color-wrap popover-wrap">
+            <button id="customColorBtn" class="swatch custom-swatch" aria-label="Custom color" aria-pressed="false" style="--swatch:#7b61ff"><span>+</span></button>
+            <div id="colorMenu" class="popover color-menu" hidden>
+              <strong>Custom color</strong>
+              <label class="color-picker-row">
+                <span>Pick visually</span>
+                <input id="customColorPicker" type="color" value="#7b61ff" />
+              </label>
+              <label class="field compact-field">
+                <span>Hex or RGB</span>
+                <input id="customColorText" type="text" value="#7b61ff" inputmode="text" autocomplete="off" spellcheck="false" placeholder="#7b61ff or rgb(123, 97, 255)" />
+              </label>
+              <div class="color-menu-actions">
+                <span id="colorError" class="input-error" aria-live="polite"></span>
+                <button id="applyCustomColorBtn" type="button" class="utility primary compact">Use color</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="sizes" aria-label="Brush size">

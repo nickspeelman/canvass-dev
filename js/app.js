@@ -5,6 +5,8 @@
   const stage = document.getElementById('stage');
   const paint = paintCanvas.getContext('2d', { alpha: false });
   const live = liveCanvas.getContext('2d');
+  const artworkCanvas = document.createElement('canvas');
+  const artwork = artworkCanvas.getContext('2d', { alpha: false });
   const hint = document.getElementById('touchHint');
 
   const app = {
@@ -28,7 +30,7 @@
 
     paintMark(mark, allowEcho = true) {
       for (const m of B.transformMarks(this, mark)) {
-        drawMark(paint, m, this);
+        drawMark(artwork, m, this);
         B.addBleedFromMark(this, m);
       }
       if (allowEcho) B.scheduleEchoes(this, mark);
@@ -40,7 +42,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 1,
-      engineVersion: '1.5.0',
+      engineVersion: '1.6.0',
       startedAt: new Date().toISOString(),
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
       events: []
@@ -91,22 +93,58 @@
     return { width, height, left: (rect.width - width) / 2, top: (rect.height - height) / 2 };
   }
 
+  function copyCanvas(source) {
+    const copy = document.createElement('canvas');
+    copy.width = source.width;
+    copy.height = source.height;
+    if (copy.width && copy.height) copy.getContext('2d', { alpha: false }).drawImage(source, 0, 0);
+    return copy;
+  }
+
+  function configureArtworkContext() {
+    artwork.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
+    artwork.lineCap = artwork.lineJoin = 'round';
+  }
+
+  function syncVisibleCanvas() {
+    paint.save();
+    paint.setTransform(1, 0, 0, 1, 0, 0);
+    paint.fillStyle = '#fff';
+    paint.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
+    if (artworkCanvas.width && artworkCanvas.height) {
+      paint.drawImage(artworkCanvas, 0, 0, artworkCanvas.width, artworkCanvas.height, 0, 0, paintCanvas.width, paintCanvas.height);
+    }
+    paint.restore();
+  }
+
   function resizeCanvases({ preserve = true } = {}) {
     const display = canvasDisplayRect();
-    if (!display) return;
+    if (!display || display.width < 1 || display.height < 1) return;
 
-    const old = document.createElement('canvas');
-    old.width = paintCanvas.width;
-    old.height = paintCanvas.height;
-    if (old.width && old.height && preserve) old.getContext('2d').drawImage(paintCanvas, 0, 0);
-
+    const oldArtwork = preserve && artworkCanvas.width && artworkCanvas.height ? copyCanvas(artworkCanvas) : null;
     app.cssWidth = display.width;
     app.cssHeight = display.height;
     app.dpr = Math.min(2, window.devicePixelRatio || 1);
+    const pixelWidth = Math.max(1, Math.round(display.width * app.dpr));
+    const pixelHeight = Math.max(1, Math.round(display.height * app.dpr));
+
+    artworkCanvas.width = pixelWidth;
+    artworkCanvas.height = pixelHeight;
+    configureArtworkContext();
+    artwork.fillStyle = '#fff';
+    artwork.fillRect(0, 0, display.width, display.height);
+    if (oldArtwork) {
+      artwork.save();
+      artwork.setTransform(1, 0, 0, 1, 0, 0);
+      artwork.drawImage(oldArtwork, 0, 0, oldArtwork.width, oldArtwork.height, 0, 0, pixelWidth, pixelHeight);
+      artwork.restore();
+      configureArtworkContext();
+      app.dirty = true;
+    }
 
     for (const c of [paintCanvas, liveCanvas]) {
-      c.width = Math.max(1, Math.round(display.width * app.dpr));
-      c.height = Math.max(1, Math.round(display.height * app.dpr));
+      c.width = pixelWidth;
+      c.height = pixelHeight;
       c.style.width = `${display.width}px`;
       c.style.height = `${display.height}px`;
       c.style.left = `${display.left}px`;
@@ -117,16 +155,7 @@
     live.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
     paint.lineCap = paint.lineJoin = 'round';
     live.lineCap = live.lineJoin = 'round';
-
-    paint.fillStyle = '#fff';
-    paint.fillRect(0, 0, display.width, display.height);
-    if (old.width && old.height && preserve) {
-      paint.save();
-      paint.setTransform(1, 0, 0, 1, 0, 0);
-      paint.drawImage(old, 0, 0, old.width, old.height, 0, 0, paintCanvas.width, paintCanvas.height);
-      paint.restore();
-      app.dirty = true;
-    }
+    syncVisibleCanvas();
   }
 
   function drawMark(ctx, mark, appRef) {
@@ -263,28 +292,118 @@
     app.lastFrame = now;
     processEchoes(now);
     B.updateParticles(app, dt);
+    if (app.dirty) { syncVisibleCanvas(); app.dirty = false; }
     renderLive();
     requestAnimationFrame(frame);
   }
 
+  const effectsBtn = document.getElementById('effectsBtn');
+  const effectsMenu = document.getElementById('effectsMenu');
+  const effectsCount = document.getElementById('effectsCount');
+  const customColorBtn = document.getElementById('customColorBtn');
+  const colorMenu = document.getElementById('colorMenu');
+  const customColorPicker = document.getElementById('customColorPicker');
+  const customColorText = document.getElementById('customColorText');
+  const colorError = document.getElementById('colorError');
+
+  function closePopovers(except = null) {
+    if (except !== effectsMenu) { effectsMenu.hidden = true; effectsBtn.setAttribute('aria-expanded', 'false'); }
+    if (except !== colorMenu) colorMenu.hidden = true;
+  }
+
+  function updateEffectsCount() {
+    effectsCount.textContent = String(Object.values(app.state.behaviors).filter(Boolean).length);
+  }
+
+  function setBehavior(key, enabled, shouldRecord = true) {
+    app.state.behaviors[key] = enabled;
+    const btn = document.querySelector(`.behavior[data-behavior="${key}"]`);
+    if (btn) {
+      btn.classList.toggle('active', enabled);
+      btn.setAttribute('aria-pressed', String(enabled));
+    }
+    if (shouldRecord) record('behavior', { behavior: key, enabled });
+    updateEffectsCount();
+  }
+
+  effectsBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const willOpen = effectsMenu.hidden;
+    closePopovers(willOpen ? effectsMenu : null);
+    effectsMenu.hidden = !willOpen;
+    effectsBtn.setAttribute('aria-expanded', String(willOpen));
+  });
+
   document.querySelectorAll('.behavior').forEach(btn => {
+    btn.addEventListener('click', () => setBehavior(btn.dataset.behavior, !app.state.behaviors[btn.dataset.behavior]));
+  });
+
+  document.getElementById('selectAllEffectsBtn').addEventListener('click', () => {
+    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, true, false));
+    record('behavior-all', { enabled: true });
+  });
+
+  document.getElementById('clearAllEffectsBtn').addEventListener('click', () => {
+    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, false, false));
+    record('behavior-all', { enabled: false });
+  });
+
+  function activateColorButton(btn, color) {
+    document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
+    btn.classList.add('active');
+    btn.setAttribute('aria-pressed', 'true');
+    app.state.color = color;
+    record('color', { color });
+  }
+
+  document.querySelectorAll('.swatch[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const key = btn.dataset.behavior;
-      app.state.behaviors[key] = !app.state.behaviors[key];
-      btn.classList.toggle('active', app.state.behaviors[key]);
-      btn.setAttribute('aria-pressed', String(app.state.behaviors[key]));
-      record('behavior', { behavior: key, enabled: app.state.behaviors[key] });
+      closePopovers();
+      activateColorButton(btn, btn.dataset.color);
     });
   });
 
-  document.querySelectorAll('.swatch').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
-      btn.classList.add('active'); btn.setAttribute('aria-pressed', 'true');
-      app.state.color = btn.dataset.color;
-      record('color', { color: app.state.color });
-    });
+  function parseCssColor(value) {
+    const text = value.trim();
+    if (/^#[0-9a-f]{3}$/i.test(text)) return '#' + [...text.slice(1)].map(c => c + c).join('').toLowerCase();
+    if (/^#[0-9a-f]{6}$/i.test(text)) return text.toLowerCase();
+    const match = text.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i);
+    if (!match) return null;
+    const rgb = match.slice(1, 4).map(Number);
+    if (rgb.some(v => v < 0 || v > 255)) return null;
+    return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+  }
+
+  function setCustomColor(color, apply = true) {
+    customColorPicker.value = color;
+    customColorText.value = color;
+    customColorBtn.style.setProperty('--swatch', color);
+    colorError.textContent = '';
+    if (apply) activateColorButton(customColorBtn, color);
+  }
+
+  customColorBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const willOpen = colorMenu.hidden;
+    closePopovers(willOpen ? colorMenu : null);
+    colorMenu.hidden = !willOpen;
   });
+
+  customColorPicker.addEventListener('input', () => setCustomColor(customColorPicker.value, false));
+  customColorText.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('applyCustomColorBtn').click(); }
+  });
+  document.getElementById('applyCustomColorBtn').addEventListener('click', () => {
+    const color = parseCssColor(customColorText.value);
+    if (!color) { colorError.textContent = 'Use a hex or RGB color.'; return; }
+    setCustomColor(color, true);
+    colorMenu.hidden = true;
+  });
+
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest('.popover-wrap')) closePopovers();
+  });
+  updateEffectsCount();
 
   document.querySelectorAll('.size').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -296,11 +415,12 @@
   });
 
   function clearCanvas(startNew = false) {
-    paint.save();
-    paint.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
-    paint.fillStyle = '#fff';
-    paint.fillRect(0, 0, app.cssWidth, app.cssHeight);
-    paint.restore();
+    artwork.save();
+    artwork.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
+    artwork.fillStyle = '#fff';
+    artwork.fillRect(0, 0, app.cssWidth, app.cssHeight);
+    artwork.restore();
+    syncVisibleCanvas();
     app.particles = [];
     app.echoQueue = [];
     app.orbitPhase = 0;
@@ -332,14 +452,14 @@
   }
 
   function exportCanvas() {
-    if (app.canvasSpec.mode === 'responsive' || !app.canvasSpec.width || !app.canvasSpec.height) return paintCanvas;
+    if (app.canvasSpec.mode === 'responsive' || !app.canvasSpec.width || !app.canvasSpec.height) return artworkCanvas;
     const out = document.createElement('canvas');
     out.width = app.canvasSpec.width;
     out.height = app.canvasSpec.height;
     const ctx = out.getContext('2d', { alpha: false });
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, out.width, out.height);
-    ctx.drawImage(paintCanvas, 0, 0, out.width, out.height);
+    ctx.drawImage(artworkCanvas, 0, 0, out.width, out.height);
     return out;
   }
 
@@ -444,7 +564,7 @@
 
   function saveDrawing() {
     try {
-      localStorage.setItem('touch-instrument-image-v1', paintCanvas.toDataURL('image/png'));
+      localStorage.setItem('touch-instrument-image-v1', artworkCanvas.toDataURL('image/png'));
       localStorage.setItem('touch-instrument-canvas-spec-v1', JSON.stringify(app.canvasSpec));
     } catch (_) {}
   }
@@ -454,16 +574,36 @@
     if (!data || (!force && app.dirty)) return;
     const img = new Image();
     img.onload = () => {
-      paint.drawImage(img, 0, 0, app.cssWidth, app.cssHeight);
-      app.dirty = true;
+      artwork.save();
+      artwork.setTransform(1, 0, 0, 1, 0, 0);
+      artwork.fillStyle = '#fff';
+      artwork.fillRect(0, 0, artworkCanvas.width, artworkCanvas.height);
+      artwork.drawImage(img, 0, 0, img.width, img.height, 0, 0, artworkCanvas.width, artworkCanvas.height);
+      artwork.restore();
+      configureArtworkContext();
+      syncVisibleCanvas();
+      app.dirty = false;
       hint.classList.add('hidden');
     };
     img.src = data;
   }
 
-  window.addEventListener('resize', () => { resizeCanvases({ preserve: true }); });
+  let resizeTimer = null;
+  function scheduleResize() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => resizeCanvases({ preserve: true }), 80);
+  }
+  window.addEventListener('resize', scheduleResize);
+  window.visualViewport?.addEventListener('resize', scheduleResize);
+  window.addEventListener('orientationchange', scheduleResize);
   window.addEventListener('beforeunload', saveDrawing);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) saveDrawing(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { saveDrawing(); return; }
+    app.activeTouches.clear();
+    app.lastFrame = performance.now();
+    requestAnimationFrame(() => requestAnimationFrame(() => resizeCanvases({ preserve: true })));
+  });
+  window.addEventListener('pageshow', () => requestAnimationFrame(() => resizeCanvases({ preserve: true })));
 
   try {
     const savedSpec = JSON.parse(localStorage.getItem('touch-instrument-canvas-spec-v1') || 'null');
