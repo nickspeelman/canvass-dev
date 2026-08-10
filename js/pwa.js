@@ -26,7 +26,9 @@
 
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register("service-worker.js");
+      const registration = await navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" });
+      // Check for a newly deployed worker on every full page load.
+      await registration.update();
       await requestVersion(registration.active || registration.waiting || registration.installing);
 
       // If this page was loaded under an older controlling worker, reload once

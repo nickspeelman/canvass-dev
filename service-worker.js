@@ -1,4 +1,4 @@
-const CACHE_NAME = "canvass-shell-v1.9.13";
+const CACHE_NAME = "canvass-shell-v1.9.14";
 const APP_VERSION = CACHE_NAME.replace("canvass-shell-v", "");
 
 const APP_SHELL = [
@@ -19,11 +19,21 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+
+    // Build the new app-shell cache from the origin, bypassing the browser's
+    // ordinary HTTP cache. Otherwise a new service-worker cache can be seeded
+    // with an older CSS/JS response that the browser or CDN still considers fresh.
+    await Promise.all(APP_SHELL.map(async asset => {
+      const request = new Request(asset, { cache: "reload" });
+      const response = await fetch(request);
+      if (!response.ok) throw new Error(`Failed to cache ${asset}: ${response.status}`);
+      await cache.put(asset, response);
+    }));
+
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", event => {
@@ -43,7 +53,7 @@ self.addEventListener("fetch", event => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      fetch(new Request(request, { cache: "no-store" }))
         .then(response => {
           if (response.ok) {
             const copy = response.clone();
@@ -61,7 +71,7 @@ self.addEventListener("fetch", event => {
   // fallback. A cache-first strategy can otherwise mix a newly fetched page
   // with stale CSS/JS from the previous service-worker cache.
   event.respondWith(
-    fetch(request)
+    fetch(new Request(request, { cache: "no-store" }))
       .then(response => {
         if (response.ok && response.type === "basic") {
           const copy = response.clone();
