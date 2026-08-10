@@ -36,9 +36,12 @@
 
     <section class="controls" aria-label="Instrument controls">
       <div class="control-row tools">
-        <div class="brand" aria-label="Canvass">
-          <img class="brand-mark" src="assets/icons/favicon-32x32.png" width="32" height="32" alt="" />
-          <span class="brand-name">Canvass</span>
+        <div class="brand-group">
+          <div class="brand" aria-label="Canvass">
+            <img class="brand-mark" src="assets/icons/favicon-32x32.png" width="32" height="32" alt="" />
+            <span class="brand-name">Canvass</span>
+          </div>
+          <button id="aboutBtn" type="button" class="about-trigger" aria-haspopup="dialog">About</button>
         </div>
 
         <div class="effects-control popover-wrap">
@@ -114,6 +117,23 @@
     </section>
   </main>
 
+  <dialog id="aboutDialog" class="about-dialog">
+    <div class="about-card">
+      <div class="about-heading">
+        <img src="assets/icons/favicon-32x32.png" width="38" height="38" alt="" />
+        <div>
+          <h2>Canvass</h2>
+          <p class="about-subtitle">An experimental touch-drawing instrument</p>
+        </div>
+      </div>
+      <p>Canvass grew out of a simple paint program I made for a friend’s kid. While watching it in use, I noticed unexpected effects emerging from multitouch gestures and a handful of simple drawing rules.</p>
+      <p>I started following those accidents on purpose. Canvass is the result: a drawing instrument built around unexpected interactions.</p>
+      <div class="about-footer">
+        <span id="appVersion" class="app-version" aria-live="polite">Version …</span>
+        <button id="closeAboutBtn" type="button" class="utility">Close</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="canvasDialog" class="settings-dialog">
     <form method="dialog" class="settings-card" id="canvasForm">
@@ -169,6 +189,37 @@
     </form>
   </dialog>
 
+  <script>
+    (() => {
+      const dialog = document.getElementById("aboutDialog");
+      const openButton = document.getElementById("aboutBtn");
+      const closeButton = document.getElementById("closeAboutBtn");
+
+      const openAbout = () => {
+        if (!dialog) return;
+        if (typeof dialog.showModal === "function") {
+          if (!dialog.open) dialog.showModal();
+        } else {
+          dialog.setAttribute("open", "");
+        }
+      };
+
+      const closeAbout = () => {
+        if (!dialog) return;
+        if (typeof dialog.close === "function") dialog.close();
+        else dialog.removeAttribute("open");
+      };
+
+      openButton?.addEventListener("click", openAbout);
+      closeButton?.addEventListener("click", closeAbout);
+      dialog?.addEventListener("click", event => {
+        if (event.target === dialog) closeAbout();
+      });
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && dialog?.open) closeAbout();
+      });
+    })();
+  </script>
   <script src="js/behaviors.js"></script>
   <script src="js/gif-encoder.js"></script>
   <script src="js/app.js"></script>

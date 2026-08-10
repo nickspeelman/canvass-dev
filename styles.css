@@ -23,9 +23,12 @@ button { -webkit-tap-highlight-color: transparent; }
 .controls { position: relative; z-index: 10; background: var(--panel); border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
 .control-row { display: flex; align-items: center; gap: 7px; }
 .tools { justify-content: space-between; flex-wrap: wrap; }
+.brand-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .brand { display: flex; align-items: center; gap: 7px; min-width: 0; padding-right: 2px; color: #111; user-select: none; }
 .brand-mark { width: 30px; height: 30px; flex: 0 0 30px; object-fit: contain; }
 .brand-name { font-size: 17px; font-weight: 850; letter-spacing: -.025em; white-space: nowrap; }
+.about-trigger { border: 0; background: transparent; color: #666; padding: 5px 2px; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.about-trigger:hover { color: #111; }
 .swatches, .sizes, .actions { display: flex; align-items: center; gap: 6px; }
 .actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
 .behavior, .utility, .size { min-height: 40px; border: 1px solid #bdbdb8; border-radius: 9px; background: #fff; color: var(--ink); font-weight: 700; padding: 0 11px; cursor: pointer; }
@@ -57,10 +60,11 @@ button { -webkit-tap-highlight-color: transparent; }
 .color-menu-actions { min-height: 38px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .input-error { color: #b42318; font-size: 12px; }
 
-.finish-dialog, .settings-dialog { max-height: 92dvh; border: 0; border-radius: 18px; padding: 0; box-shadow: 0 30px 100px rgba(0,0,0,.25); }
+.finish-dialog, .settings-dialog, .about-dialog { max-height: 92dvh; border: 0; border-radius: 18px; padding: 0; box-shadow: 0 30px 100px rgba(0,0,0,.25); }
 .finish-dialog { width: min(92vw, 960px); }
 .settings-dialog { width: min(92vw, 520px); }
-.finish-dialog::backdrop, .settings-dialog::backdrop { background: rgba(0,0,0,.58); }
+.about-dialog { width: min(92vw, 500px); }
+.finish-dialog::backdrop, .settings-dialog::backdrop, .about-dialog::backdrop { background: rgba(0,0,0,.58); }
 .finish-card { padding: 18px; display: grid; gap: 16px; background: #f4f4f1; }
 .preview-wrap { min-height: 200px; max-height: 68dvh; background: #fff; border: 1px solid var(--line); overflow: hidden; display: grid; place-items: center; }
 .preview-wrap img { display: block; max-width: 100%; max-height: 66dvh; object-fit: contain; }
@@ -75,6 +79,15 @@ button { -webkit-tap-highlight-color: transparent; }
 .check-row input { width: 20px; height: 20px; }
 .settings-note { margin: 0; color: #666; line-height: 1.4; font-size: 14px; }
 .settings-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.about-card { padding: 22px; display: grid; gap: 14px; background: #f4f4f1; }
+.about-heading { display: flex; align-items: center; gap: 12px; }
+.about-heading img { width: 38px; height: 38px; flex: 0 0 38px; }
+.about-heading h2 { margin: 0; font-size: 24px; letter-spacing: -.025em; }
+.about-subtitle { margin: 2px 0 0; color: #666; font-size: 13px; }
+.about-card > p { margin: 0; color: #333; font-size: 15px; line-height: 1.5; }
+.about-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--line); }
+.app-version { color: #777; font-size: 12px; font-variant-numeric: tabular-nums; }
+
 
 @media (max-width: 820px) {
   .controls { padding: 5px 6px max(5px, env(safe-area-inset-bottom)); }

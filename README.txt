@@ -1,4 +1,4 @@
-CANVASS — v1.9.7
+CANVASS — v1.9.9
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -75,7 +75,7 @@ GIF CLEAR BOUNDARY (v1.9.6)
 - Clear captures the active tool/effect state, current canvas dimensions, and a fresh deterministic random seed so stochastic effects replay consistently after the boundary.
 
 
-CUSTOM COLOR PICKER (v1.9.7)
+CUSTOM COLOR PICKER (v1.9.9)
 ----------------------------
 - Restored the original browser-native visual color picker used before the mobile-centering changes.
 - Kept Hex/RGB text entry.
