@@ -1,4 +1,4 @@
-const CACHE_NAME = "canvas-shell-v1.9.22";
+const CACHE_NAME = "canvas-shell-v1.9.23";
 const APP_VERSION = CACHE_NAME.replace("canvas-shell-v", "");
 
 const APP_SHELL = [
@@ -16,11 +16,7 @@ const APP_SHELL = [
   "./assets/icons/android-chrome-192x192.png",
   "./assets/icons/android-chrome-512x512.png",
   "./assets/icons/site.webmanifest",
-  "./static-pages.css",
-  "./donate/",
-  "./donate/index.html",
-  "./thankyou/",
-  "./thankyou/index.html"
+  "./static-pages.css"
 ];
 
 self.addEventListener("install", event => {
@@ -55,6 +51,14 @@ self.addEventListener("fetch", event => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // Donation and thank-you pages are ordinary network pages, not part of the
+  // offline drawing app. In particular, /donate/ must be allowed to execute
+  // its immediate redirect to PayPal without service-worker navigation logic.
+  if (url.pathname === "/donate" || url.pathname.startsWith("/donate/") ||
+      url.pathname === "/thankyou" || url.pathname.startsWith("/thankyou/")) {
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(
