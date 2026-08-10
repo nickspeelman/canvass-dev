@@ -247,3 +247,9 @@ button { -webkit-tap-highlight-color: transparent; }
   .gif-preview-wrap img { max-height: 44dvh; }
   .gif-card .finish-actions .utility { flex: 1 1 130px; }
 }
+
+/* Explicitly preserve hidden state against component display rules. */
+.gif-preview-wrap img[hidden],
+.gif-render-status[hidden] {
+  display: none !important;
+}
