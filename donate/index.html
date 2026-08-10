@@ -2,25 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="refresh" content="0; URL=https://www.paypal.com/donate/?hosted_button_id=SJ8XEU3D7BW5J" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#f4f4f1" />
   <meta name="robots" content="noindex, follow" />
+  <meta name="theme-color" content="#f4f4f1" />
   <link rel="canonical" href="https://canvas.nickspeelman.com/donate/" />
   <title>Canvas — Donate</title>
   <meta name="description" content="Support Canvas. You’ll be redirected to PayPal in a moment." />
-  <script>
-    (function () {
-      var url = "https://www.paypal.com/donate/?hosted_button_id=SJ8XEU3D7BW5J";
-      try { window.location.replace(url); }
-      catch (e) { window.location.href = url; }
-    })();
-  </script>
+
+  <!-- No JavaScript required: browsers that honor meta refresh leave immediately. -->
+  <meta http-equiv="refresh" content="0; url=https://www.paypal.com/donate/?hosted_button_id=SJ8XEU3D7BW5J" />
+
+  <!-- Same-origin JS fallback in case inline scripts are restricted by site policy. -->
+  <script src="./redirect.js" defer></script>
 </head>
 <body>
-  <p>
-    Redirecting you to PayPal…
-    <a href="https://www.paypal.com/donate/?hosted_button_id=SJ8XEU3D7BW5J" rel="nofollow">Continue to PayPal</a>
-  </p>
+  <main>
+    <p>Redirecting you to PayPal…</p>
+    <p><a href="https://www.paypal.com/donate/?hosted_button_id=SJ8XEU3D7BW5J" rel="nofollow noopener">Continue to PayPal</a></p>
+  </main>
 </body>
 </html>
