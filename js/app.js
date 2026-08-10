@@ -33,7 +33,7 @@
       color: '#e53935',
       size: 16,
       hue: 0,
-      behaviors: { cycle: true, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false }
+      behaviors: { cycle: false, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false }
     },
     canvasSpec: { mode: 'responsive', width: null, height: null },
     activeTouches: new Map(),
@@ -781,7 +781,7 @@
       color: state?.color || '#e53935',
       size: Number(state?.size) || 16,
       hue: 0,
-      behaviors: { cycle: true, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false, ...(state?.behaviors || {}) }
+      behaviors: { cycle: false, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false, ...(state?.behaviors || {}) }
     };
   }
 
