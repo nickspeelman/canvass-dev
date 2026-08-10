@@ -35,6 +35,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .behavior.active, .size.active { background: var(--active); color: var(--active-text); border-color: var(--active); }
 .utility.primary { background: #111; color: #fff; border-color: #111; }
 .utility.danger { border-color: #b42318; color: #b42318; }
+.behavior:disabled, .utility:disabled, .size:disabled { opacity: .42; cursor: not-allowed; }
 .utility.compact { min-height: 36px; padding: 0 10px; }
 
 .swatch { position: relative; width: 38px; height: 38px; flex: 0 0 38px; padding: 0; border-radius: 50%; border: 3px solid transparent; background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); cursor: pointer; }

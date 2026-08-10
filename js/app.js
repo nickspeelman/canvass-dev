@@ -11,12 +11,14 @@
 
   function makeRandom(seed) {
     let a = seed >>> 0;
-    return () => {
+    const random = () => {
       a |= 0; a = (a + 0x6D2B79F5) | 0;
       let t = Math.imul(a ^ (a >>> 15), 1 | a);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+    random.getState = () => a >>> 0;
+    return random;
   }
 
   function newSeed() {
@@ -64,7 +66,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 2,
-      engineVersion: '1.9.7',
+      engineVersion: '1.9.16',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -207,6 +209,76 @@
     return { x, y, inside: x >= 0 && y >= 0 && x <= r.width && y <= r.height };
   }
 
+  const undoBtn = document.getElementById('undoBtn');
+  const undoHistory = [];
+  const UNDO_LIMIT = 10;
+  const UNDO_PIXEL_BUDGET = 16000000;
+
+  function updateUndoButton() {
+    undoBtn.disabled = undoHistory.length === 0;
+  }
+
+  function trimUndoHistory() {
+    let pixels = undoHistory.reduce((total, item) => total + item.canvas.width * item.canvas.height, 0);
+    while (undoHistory.length > 1 && (undoHistory.length > UNDO_LIMIT || pixels > UNDO_PIXEL_BUDGET)) {
+      const removed = undoHistory.shift();
+      pixels -= removed.canvas.width * removed.canvas.height;
+    }
+  }
+
+  function pushUndoCheckpoint() {
+    undoHistory.push({
+      canvas: copyCanvas(artworkCanvas),
+      canvasSpec: { ...app.canvasSpec },
+      eventCount: app.session?.events?.length ?? 0,
+      hue: app.state.hue,
+      randomState: app.random?.getState?.() ?? app.randomSeed,
+      hintHidden: hint.classList.contains('hidden')
+    });
+    trimUndoHistory();
+    updateUndoButton();
+  }
+
+  function clearUndoHistory() {
+    undoHistory.length = 0;
+    updateUndoButton();
+  }
+
+  function undoLastAction() {
+    const checkpoint = undoHistory.pop();
+    if (!checkpoint) return;
+
+    app.activeTouches.clear();
+    app.particles = [];
+    app.echoQueue = [];
+    app.orbitPhase = 0;
+    live.clearRect(0, 0, app.cssWidth, app.cssHeight);
+
+    app.canvasSpec = { ...checkpoint.canvasSpec };
+    resizeCanvases({ preserve: false });
+
+    artwork.save();
+    artwork.setTransform(1, 0, 0, 1, 0, 0);
+    artwork.fillStyle = '#fff';
+    artwork.fillRect(0, 0, artworkCanvas.width, artworkCanvas.height);
+    artwork.drawImage(checkpoint.canvas, 0, 0, checkpoint.canvas.width, checkpoint.canvas.height, 0, 0, artworkCanvas.width, artworkCanvas.height);
+    artwork.restore();
+    configureArtworkContext();
+    syncVisibleCanvas();
+
+    app.state.hue = checkpoint.hue;
+    app.random = makeRandom(checkpoint.randomState);
+    app.dirty = checkpoint.hintHidden;
+    hint.classList.toggle('hidden', checkpoint.hintHidden);
+
+    if (app.session?.events) app.session.events.length = Math.min(checkpoint.eventCount, app.session.events.length);
+    record('undo');
+    saveDrawing();
+    updateUndoButton();
+  }
+
+  undoBtn.addEventListener('click', undoLastAction);
+
   function pointerDown(e) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
@@ -214,6 +286,7 @@
     const p = pointFromEvent(e);
     if (!p.inside) return;
     const now = performance.now();
+    if (app.activeTouches.size === 0) pushUndoCheckpoint();
     const touch = { id: e.pointerId, x: p.x, y: p.y, px: p.x, py: p.y, time: now, ptime: now, speed: 0 };
     app.activeTouches.set(e.pointerId, touch);
     hint.classList.add('hidden');
@@ -862,6 +935,8 @@
   gifDialog.addEventListener('cancel', () => { gifResult.cancelled = true; });
 
   function clearCanvas(startNew = false) {
+    if (startNew) clearUndoHistory();
+    else pushUndoCheckpoint();
     artwork.save();
     artwork.setTransform(app.dpr, 0, 0, app.dpr, 0, 0);
     artwork.fillStyle = '#fff';
@@ -1052,6 +1127,7 @@
       spec = { mode: 'fixed', width, height };
     }
     const preserve = preserveCanvasCheck.checked;
+    pushUndoCheckpoint();
     app.canvasSpec = spec;
     resizeCanvases({ preserve });
     if (!preserve) {
