@@ -618,7 +618,7 @@
   const GIF_MAX_DIMENSION = 480;
   const GIF_MAX_FRAMES = 720;
   const GIF_TAIL_MS = 1600;
-  const gifResult = { rendering: false, blob: null, url: null };
+  const gifResult = { rendering: false, cancelled: false, blob: null, url: null };
 
   function formatDuration(ms) {
     const seconds = Math.max(0, ms) / 1000;
@@ -795,7 +795,7 @@
     const firstDown = artistic.find(e => e.type === 'down');
     if (!firstDown) { alert('Make some marks after the most recent Clear before rendering a performance GIF.'); return; }
 
-    clearGifResult(); gifResult.rendering = true; gifRenderBtn.disabled = true;
+    clearGifResult(); gifResult.rendering = true; gifResult.cancelled = false; gifRenderBtn.disabled = true;
     gifRenderBtn.textContent = 'Rendering…'; gifRenderStatus.hidden = false; gifRenderStatus.textContent = 'Replaying performance…';
     gifProgressBar.style.width = '0%'; gifDialog.showModal();
 
@@ -825,17 +825,24 @@
       if (Math.floor(simTime/simStep)%30===0) {
         gifProgressBar.style.width=`${Math.min(45,Math.round(simTime/duration*45))}%`;
         await new Promise(r=>setTimeout(r,0));
+        if (gifResult.cancelled) {
+          gifResult.rendering = false;
+          gifRenderBtn.disabled = false;
+          gifRenderBtn.textContent = 'Render GIF';
+          return;
+        }
       }
     }
 
     gifRenderStatus.textContent='Encoding GIF…';
     try {
-      const blob=await window.CanvassGifEncoder.encode({width:outW,height:outH,frames,delayMs:frameDelay,repeat:0,onProgress:p=>{gifProgressBar.style.width=`${45+Math.round(p*55)}%`; gifRenderStatus.textContent=`Encoding GIF… ${Math.round(p*100)}%`;}});
+      const blob=await window.CanvassGifEncoder.encode({width:outW,height:outH,frames,delayMs:frameDelay,repeat:0,shouldCancel:()=>gifResult.cancelled,onProgress:p=>{gifProgressBar.style.width=`${45+Math.round(p*55)}%`; gifRenderStatus.textContent=`Encoding GIF… ${Math.round(p*100)}%`;}});
       gifResult.blob=blob; gifResult.url=URL.createObjectURL(blob); gifPreview.src=gifResult.url; gifPreview.hidden=false;
       gifRenderStatus.hidden=true; gifProgressBar.style.width='100%';
       gifMeta.textContent=`${formatDuration(duration)} performance • ${frames.length} frames • ${outW} × ${outH} • ${formatBytes(blob.size)}`;
       downloadGifBtn.disabled=false; record('gif-ready',{bytes:blob.size,source:'performance-replay'});
     } catch(error) {
+      if (error?.name === 'AbortError' || gifResult.cancelled) return;
       console.error(error); gifRenderStatus.textContent='Could not render this GIF.'; gifProgressBar.style.width='0%';
     } finally {
       gifResult.rendering=false; gifRenderBtn.disabled=false; gifRenderBtn.textContent='Render GIF';
@@ -843,8 +850,16 @@
   }
 
   gifRenderBtn.addEventListener('click', renderPerformanceGif);
-  downloadGifBtn.addEventListener('click',()=>{if(!gifResult.blob)return;downloadBlob(gifResult.blob,`canvass-performance-${timestampName()}.gif`);record('download-gif',{bytes:gifResult.blob.size});});
-  document.getElementById('closeGifBtn').addEventListener('click',()=>gifDialog.close());
+  downloadGifBtn.addEventListener('click', async () => {
+    if (!gifResult.blob) return;
+    const saved = await saveBlobForUser(gifResult.blob, `canvass-performance-${timestampName()}.gif`);
+    if (saved) record('download-gif', { bytes: gifResult.blob.size });
+  });
+  document.getElementById('closeGifBtn').addEventListener('click', () => {
+    gifResult.cancelled = true;
+    if (gifDialog.open) gifDialog.close();
+  });
+  gifDialog.addEventListener('cancel', () => { gifResult.cancelled = true; });
 
   function clearCanvas(startNew = false) {
     artwork.save();
@@ -887,8 +902,55 @@
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 500);
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  function isMobileSaveEnvironment() {
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+  }
+
+  async function saveBlobForUser(blob, filename) {
+    // Mobile browsers, especially iOS Safari/PWAs, can ignore a synthetic
+    // <a download> click for blob URLs. File sharing is the reliable native
+    // save path there and exposes Save to Photos/Files (or the platform equivalent).
+    if (isMobileSaveEnvironment() && typeof File === 'function' && navigator.share) {
+      const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+      let canShare = true;
+      try {
+        canShare = !navigator.canShare || navigator.canShare({ files: [file] });
+      } catch (_) {
+        canShare = false;
+      }
+      if (canShare) {
+        try {
+          await navigator.share({ files: [file] });
+          return true;
+        } catch (error) {
+          if (error?.name === 'AbortError') return false;
+          console.warn('Native file share failed; falling back to browser download.', error);
+        }
+      }
+    }
+
+    downloadBlob(blob, filename);
+    return true;
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    const header = dataUrl.slice(0, comma);
+    const mime = (header.match(/^data:([^;,]+)/) || [])[1] || 'application/octet-stream';
+    const binary = atob(dataUrl.slice(comma + 1));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
   }
 
   function exportCanvas() {
@@ -905,9 +967,27 @@
 
   function saveImageDownload(source = 'save-button') {
     saveDrawing();
-    exportCanvas().toBlob(blob => {
+    const canvas = exportCanvas();
+    const filename = `canvass-${timestampName()}.png`;
+
+    if (isMobileSaveEnvironment()) {
+      // Keep file creation inside the original tap. Delaying it through
+      // canvas.toBlob() can cause mobile browsers to discard user activation
+      // before the native save/share action starts.
+      try {
+        const blob = dataUrlToBlob(canvas.toDataURL('image/png'));
+        saveBlobForUser(blob, filename).then(saved => {
+          if (saved) record('download-image', { source });
+        });
+      } catch (error) {
+        console.error('Could not prepare image for saving.', error);
+      }
+      return;
+    }
+
+    canvas.toBlob(blob => {
       if (!blob) return;
-      downloadBlob(blob, `canvass-${timestampName()}.png`);
+      downloadBlob(blob, filename);
       record('download-image', { source });
     }, 'image/png');
   }

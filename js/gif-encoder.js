@@ -120,7 +120,7 @@
     sink.byte(0);
   }
 
-  async function encode({ width, height, frames, delayMs = 125, repeat = 0, onProgress = null }) {
+  async function encode({ width, height, frames, delayMs = 125, repeat = 0, onProgress = null, shouldCancel = null }) {
     if (!width || !height || !frames?.length) throw new Error('GIF requires at least one frame.');
     if (width > 65535 || height > 65535) throw new Error('GIF dimensions are too large.');
 
@@ -142,6 +142,11 @@
 
     const delayCs = Math.max(2, Math.round(delayMs / 10));
     for (let i = 0; i < frames.length; i++) {
+      if (shouldCancel?.()) {
+        const error = new Error('GIF render cancelled.');
+        error.name = 'AbortError';
+        throw error;
+      }
       const frame = frames[i];
       if (!(frame instanceof Uint8Array) || frame.length !== width * height) {
         throw new Error(`Invalid GIF frame ${i + 1}.`);
