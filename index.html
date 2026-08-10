@@ -83,10 +83,11 @@
             <button id="customColorBtn" class="swatch custom-swatch" aria-label="Custom color" aria-pressed="false" style="--swatch:#7b61ff"><span>+</span></button>
             <div id="colorMenu" class="popover color-menu" hidden>
               <strong>Custom color</strong>
-              <label class="color-picker-row">
-                <span>Pick visually</span>
-                <input id="customColorPicker" type="color" value="#7b61ff" />
-              </label>
+              <div class="visual-color-picker-wrap">
+                <div id="customColorPicker" class="visual-color-picker" role="slider" tabindex="0" aria-label="Choose a custom color visually">
+                  <span id="customColorCursor" class="visual-color-cursor" aria-hidden="true"></span>
+                </div>
+              </div>
               <label class="field compact-field">
                 <span>Hex or RGB</span>
                 <input id="customColorText" type="text" value="#7b61ff" inputmode="text" autocomplete="off" spellcheck="false" placeholder="#7b61ff or rgb(123, 97, 255)" />
@@ -127,7 +128,7 @@
         </div>
       </div>
       <p>Canvass grew out of a simple paint program I made for a friend’s kid. While watching it in use, I noticed unexpected effects emerging from multitouch gestures and a handful of simple drawing rules.</p>
-      <p>I started following those accidents on purpose. Canvass is the result: a drawing instrument built around unexpected interactions.</p>
+      <p>I started following those accidents on purpose. Canvass is the result: a drawing instrument built around surprising interactions between simple sets of rules.</p>
       <div class="about-footer">
         <span id="appVersion" class="app-version" aria-live="polite">Version …</span>
         <button id="closeAboutBtn" type="button" class="utility">Close</button>

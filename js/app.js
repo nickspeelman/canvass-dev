@@ -326,6 +326,7 @@
   const customColorBtn = document.getElementById('customColorBtn');
   const colorMenu = document.getElementById('colorMenu');
   const customColorPicker = document.getElementById('customColorPicker');
+  const customColorCursor = document.getElementById('customColorCursor');
   const customColorText = document.getElementById('customColorText');
   const colorError = document.getElementById('colorError');
 
@@ -457,11 +458,79 @@
     return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
   }
 
-  function setCustomColor(color, apply = true) {
-    customColorPicker.value = color;
+  function hexToRgb(color) {
+    const hex = color.replace('#', '');
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16)
+    };
+  }
+
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+  }
+
+  function hueRgb(hue) {
+    const h = ((hue % 360) + 360) % 360;
+    const c = 255;
+    const x = Math.round(255 * (1 - Math.abs((h / 60) % 2 - 1)));
+    if (h < 60) return { r: c, g: x, b: 0 };
+    if (h < 120) return { r: x, g: c, b: 0 };
+    if (h < 180) return { r: 0, g: c, b: x };
+    if (h < 240) return { r: 0, g: x, b: c };
+    if (h < 300) return { r: x, g: 0, b: c };
+    return { r: c, g: 0, b: x };
+  }
+
+  function colorFromVisualPosition(x, y) {
+    const base = hueRgb(x * 360);
+    if (y <= 0.5) {
+      const mix = 1 - y * 2;
+      return rgbToHex(
+        base.r + (255 - base.r) * mix,
+        base.g + (255 - base.g) * mix,
+        base.b + (255 - base.b) * mix
+      );
+    }
+    const keep = 2 - y * 2;
+    return rgbToHex(base.r * keep, base.g * keep, base.b * keep);
+  }
+
+  function visualPositionFromColor(color) {
+    const { r, g, b } = hexToRgb(color);
+    const rn = r / 255, gn = g / 255, bn = b / 255;
+    const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+    const delta = max - min;
+    let hue = 0;
+    if (delta) {
+      if (max === rn) hue = 60 * (((gn - bn) / delta) % 6);
+      else if (max === gn) hue = 60 * (((bn - rn) / delta) + 2);
+      else hue = 60 * (((rn - gn) / delta) + 4);
+    }
+    if (hue < 0) hue += 360;
+    const sat = max === 0 ? 0 : delta / max;
+    const x = hue / 360;
+    let y;
+    if (sat < 0.06) y = max >= 0.5 ? (1 - max) * 0.5 : 0.5 + (0.5 - max);
+    else if (max > 0.98) y = 0.5 - (1 - sat) * 0.5;
+    else y = 1 - max * 0.5;
+    return { x, y: Math.max(0, Math.min(1, y)) };
+  }
+
+  function setVisualColorCursor(x, y) {
+    customColorCursor.style.left = `${Math.max(0, Math.min(1, x)) * 100}%`;
+    customColorCursor.style.top = `${Math.max(0, Math.min(1, y)) * 100}%`;
+  }
+
+  function setCustomColor(color, apply = true, syncCursor = true) {
     customColorText.value = color;
     customColorBtn.style.setProperty('--swatch', color);
     colorError.textContent = '';
+    if (syncCursor) {
+      const pos = visualPositionFromColor(color);
+      setVisualColorCursor(pos.x, pos.y);
+    }
     if (apply) activateColorButton(customColorBtn, color);
   }
 
@@ -473,7 +542,46 @@
     colorMenu.hidden = !willOpen;
   });
 
-  customColorPicker.addEventListener('input', () => setCustomColor(customColorPicker.value, false));
+  function pickVisualColor(clientX, clientY) {
+    const rect = customColorPicker.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    setVisualColorCursor(x, y);
+    setCustomColor(colorFromVisualPosition(x, y), false, false);
+  }
+
+  customColorPicker.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    customColorPicker.setPointerCapture?.(e.pointerId);
+    pickVisualColor(e.clientX, e.clientY);
+  });
+  customColorPicker.addEventListener('pointermove', e => {
+    if (customColorPicker.hasPointerCapture?.(e.pointerId) || e.buttons || e.pressure > 0) {
+      pickVisualColor(e.clientX, e.clientY);
+    }
+  });
+  customColorPicker.addEventListener('pointerup', e => {
+    if (customColorPicker.hasPointerCapture?.(e.pointerId)) customColorPicker.releasePointerCapture?.(e.pointerId);
+  });
+  customColorPicker.addEventListener('pointercancel', e => {
+    if (customColorPicker.hasPointerCapture?.(e.pointerId)) customColorPicker.releasePointerCapture?.(e.pointerId);
+  });
+  customColorPicker.addEventListener('keydown', e => {
+    const pos = visualPositionFromColor(parseCssColor(customColorText.value) || '#7b61ff');
+    const step = e.shiftKey ? 0.05 : 0.015;
+    let x = pos.x, y = pos.y;
+    if (e.key === 'ArrowLeft') x -= step;
+    else if (e.key === 'ArrowRight') x += step;
+    else if (e.key === 'ArrowUp') y -= step;
+    else if (e.key === 'ArrowDown') y += step;
+    else return;
+    e.preventDefault();
+    x = Math.max(0, Math.min(1, x));
+    y = Math.max(0, Math.min(1, y));
+    setVisualColorCursor(x, y);
+    setCustomColor(colorFromVisualPosition(x, y), false, false);
+  });
   customColorText.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); document.getElementById('applyCustomColorBtn').click(); }
   });

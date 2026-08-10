@@ -54,8 +54,33 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .color-menu { width: min(340px, calc(100vw - 16px)); }
 .color-menu > strong { display: block; margin-bottom: 12px; }
-.color-picker-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-weight: 700; margin-bottom: 12px; }
-.color-picker-row input[type="color"] { width: 72px; height: 44px; padding: 2px; border: 1px solid #aaa; border-radius: 9px; background: #fff; }
+.visual-color-picker-wrap { margin-bottom: 12px; }
+.visual-color-picker {
+  position: relative;
+  width: 100%;
+  height: 168px;
+  overflow: hidden;
+  border: 1px solid #aaa;
+  border-radius: 11px;
+  background:
+    linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 50%, rgba(0,0,0,0) 50%, rgba(0,0,0,1) 100%),
+    linear-gradient(to right, #f00 0%, #ff0 16.666%, #0f0 33.333%, #0ff 50%, #00f 66.666%, #f0f 83.333%, #f00 100%);
+  cursor: crosshair;
+  touch-action: none;
+}
+.visual-color-picker:focus-visible { outline: 3px solid #111; outline-offset: 2px; }
+.visual-color-cursor {
+  position: absolute;
+  left: 74%;
+  top: 45%;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.7), 0 2px 5px rgba(0,0,0,.25);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
 .compact-field { gap: 5px; }
 .color-menu-actions { min-height: 38px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .input-error { color: #b42318; font-size: 12px; }

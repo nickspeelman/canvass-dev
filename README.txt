@@ -1,4 +1,4 @@
-CANVASS — v1.9.9
+CANVASS — v1.9.10
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
