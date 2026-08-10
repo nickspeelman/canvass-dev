@@ -64,7 +64,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 2,
-      engineVersion: '1.9.2',
+      engineVersion: '1.9.3',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -349,13 +349,44 @@
     updateEffectsCount();
   }
 
+  function positionEffectsMenu() {
+    const mobile = window.matchMedia('(max-width: 520px)').matches;
+    if (mobile) {
+      const controls = document.querySelector('.controls');
+      const controlsHeight = controls ? controls.getBoundingClientRect().height : 0;
+      effectsMenu.style.position = 'fixed';
+      effectsMenu.style.left = '8px';
+      effectsMenu.style.right = '8px';
+      effectsMenu.style.bottom = `${Math.ceil(controlsHeight + 8)}px`;
+      effectsMenu.style.width = 'auto';
+      effectsMenu.style.transform = 'none';
+    } else {
+      effectsMenu.style.position = '';
+      effectsMenu.style.left = '';
+      effectsMenu.style.right = '';
+      effectsMenu.style.bottom = '';
+      effectsMenu.style.width = '';
+      effectsMenu.style.transform = '';
+    }
+  }
+
   effectsBtn.addEventListener('click', e => {
     e.stopPropagation();
     const willOpen = effectsMenu.hidden;
     closePopovers(willOpen ? effectsMenu : null);
+    if (willOpen) positionEffectsMenu();
     effectsMenu.hidden = !willOpen;
     effectsBtn.setAttribute('aria-expanded', String(willOpen));
   });
+
+  window.addEventListener('resize', () => {
+    if (!effectsMenu.hidden) positionEffectsMenu();
+  });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (!effectsMenu.hidden) positionEffectsMenu();
+    });
+  }
 
   document.querySelectorAll('.behavior').forEach(btn => {
     btn.addEventListener('click', () => setBehavior(btn.dataset.behavior, !app.state.behaviors[btn.dataset.behavior]));
