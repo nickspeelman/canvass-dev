@@ -111,6 +111,9 @@ button { -webkit-tap-highlight-color: transparent; }
 .about-heading h2 { margin: 0; font-size: 24px; letter-spacing: -.025em; }
 .about-subtitle { margin: 2px 0 0; color: #666; font-size: 13px; }
 .about-card > p { margin: 0; color: #333; font-size: 15px; line-height: 1.5; }
+.about-card .about-support { color: #777; font-size: 12px; }
+.about-card .about-support a { color: inherit; text-underline-offset: 2px; }
+.about-card .about-support a:hover { color: #111; }
 .about-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--line); }
 .app-version { color: #777; font-size: 12px; font-variant-numeric: tabular-nums; }
 

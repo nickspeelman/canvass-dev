@@ -1,0 +1,17 @@
+:root { --ink:#111; --muted:#6b6b68; --line:#d7d7d1; --paper:#f4f4f1; }
+* { box-sizing:border-box; }
+html, body { min-height:100%; }
+body { margin:0; min-height:100dvh; display:grid; place-items:center; padding:24px; background:#e9e9e5; color:var(--ink); font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+.page-card { width:min(100%,520px); padding:28px; border:1px solid var(--line); border-radius:18px; background:var(--paper); box-shadow:0 20px 60px rgba(0,0,0,.10); }
+.brand { display:flex; align-items:center; gap:10px; margin-bottom:24px; color:inherit; text-decoration:none; font-weight:850; letter-spacing:-.025em; }
+.brand img { width:34px; height:34px; }
+h1 { margin:0 0 12px; font-size:clamp(28px,7vw,38px); letter-spacing:-.035em; line-height:1.05; }
+p { margin:0 0 14px; color:#3d3d3a; line-height:1.55; }
+.actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:24px; }
+.button { min-height:44px; display:inline-flex; align-items:center; justify-content:center; padding:0 15px; border:1px solid #111; border-radius:9px; background:#111; color:#fff; font-weight:750; text-decoration:none; cursor:pointer; }
+.button.secondary { border-color:#bdbdb8; background:#fff; color:#111; }
+.note { margin-top:18px; color:var(--muted); font-size:12px; }
+@media (max-width:520px){ body{padding:14px;} .page-card{padding:22px;} .actions{display:grid;} .button{width:100%;} }
+
+.paypal-donate { min-height:47px; margin-top:24px; display:flex; align-items:center; }
+.paypal-donate img { display:block; max-width:100%; height:auto; }

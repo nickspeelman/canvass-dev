@@ -1,4 +1,4 @@
-const CACHE_NAME = "canvas-shell-v1.9.20";
+const CACHE_NAME = "canvas-shell-v1.9.21";
 const APP_VERSION = CACHE_NAME.replace("canvas-shell-v", "");
 
 const APP_SHELL = [
@@ -15,7 +15,12 @@ const APP_SHELL = [
   "./assets/icons/apple-touch-icon.png",
   "./assets/icons/android-chrome-192x192.png",
   "./assets/icons/android-chrome-512x512.png",
-  "./assets/icons/site.webmanifest"
+  "./assets/icons/site.webmanifest",
+  "./static-pages.css",
+  "./donate/",
+  "./donate/index.html",
+  "./thankyou/",
+  "./thankyou/index.html"
 ];
 
 self.addEventListener("install", event => {
@@ -57,11 +62,11 @@ self.addEventListener("fetch", event => {
         .then(response => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put("./index.html", copy));
+            caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
           }
           return response;
         })
-        .catch(() => caches.match("./index.html"))
+        .catch(async () => (await caches.match(request)) || caches.match("./index.html"))
     );
     return;
   }
