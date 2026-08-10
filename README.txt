@@ -1,4 +1,4 @@
-CANVASS — v1.9.3
+CANVASS — v1.9.5
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -68,3 +68,8 @@ PERFORMANCE GIF — v1.9.1
 - Long sessions are automatically sampled to a practical maximum frame count rather than imposing a performance-time limit.
 - Start again begins a new performance/session log. The session JSON download contains the replay data and random seed.
 
+
+GIF CLEAR BOUNDARY (v1.9.5)
+- Render GIF always begins at the most recent Clear action.
+- Anything drawn or configured before that Clear is excluded from the exported timeline.
+- Clear captures the active tool/effect state, current canvas dimensions, and a fresh deterministic random seed so stochastic effects replay consistently after the boundary.

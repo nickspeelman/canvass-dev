@@ -64,7 +64,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 2,
-      engineVersion: '1.9.3',
+      engineVersion: '1.9.5',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -349,15 +349,18 @@
     updateEffectsCount();
   }
 
+  function getControlsHeight() {
+    const controls = document.querySelector('.controls');
+    return controls ? controls.getBoundingClientRect().height : 0;
+  }
+
   function positionEffectsMenu() {
     const mobile = window.matchMedia('(max-width: 520px)').matches;
     if (mobile) {
-      const controls = document.querySelector('.controls');
-      const controlsHeight = controls ? controls.getBoundingClientRect().height : 0;
       effectsMenu.style.position = 'fixed';
       effectsMenu.style.left = '8px';
       effectsMenu.style.right = '8px';
-      effectsMenu.style.bottom = `${Math.ceil(controlsHeight + 8)}px`;
+      effectsMenu.style.bottom = `${Math.ceil(getControlsHeight() + 8)}px`;
       effectsMenu.style.width = 'auto';
       effectsMenu.style.transform = 'none';
     } else {
@@ -370,6 +373,31 @@
     }
   }
 
+  function positionColorMenu() {
+    const mobile = window.matchMedia('(max-width: 520px)').matches;
+    if (mobile) {
+      colorMenu.style.position = 'fixed';
+      colorMenu.style.left = '8px';
+      colorMenu.style.right = '8px';
+      colorMenu.style.bottom = `${Math.ceil(getControlsHeight() + 8)}px`;
+      colorMenu.style.width = 'auto';
+      colorMenu.style.maxWidth = '340px';
+      colorMenu.style.marginLeft = 'auto';
+      colorMenu.style.marginRight = 'auto';
+      colorMenu.style.transform = 'none';
+    } else {
+      colorMenu.style.position = '';
+      colorMenu.style.left = '';
+      colorMenu.style.right = '';
+      colorMenu.style.bottom = '';
+      colorMenu.style.width = '';
+      colorMenu.style.maxWidth = '';
+      colorMenu.style.marginLeft = '';
+      colorMenu.style.marginRight = '';
+      colorMenu.style.transform = '';
+    }
+  }
+
   effectsBtn.addEventListener('click', e => {
     e.stopPropagation();
     const willOpen = effectsMenu.hidden;
@@ -379,13 +407,14 @@
     effectsBtn.setAttribute('aria-expanded', String(willOpen));
   });
 
-  window.addEventListener('resize', () => {
+  function repositionOpenPopovers() {
     if (!effectsMenu.hidden) positionEffectsMenu();
-  });
+    if (!colorMenu.hidden) positionColorMenu();
+  }
+
+  window.addEventListener('resize', repositionOpenPopovers);
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-      if (!effectsMenu.hidden) positionEffectsMenu();
-    });
+    window.visualViewport.addEventListener('resize', repositionOpenPopovers);
   }
 
   document.querySelectorAll('.behavior').forEach(btn => {
@@ -440,6 +469,7 @@
     e.stopPropagation();
     const willOpen = colorMenu.hidden;
     closePopovers(willOpen ? colorMenu : null);
+    if (willOpen) positionColorMenu();
     colorMenu.hidden = !willOpen;
   });
 
@@ -509,7 +539,7 @@
     };
   }
 
-  function makeReplay(session) {
+  function makeReplay(session, initialState = null, randomSeed = null) {
     const logicalWidth = Math.max(1, Math.round(session.initialCanvas?.width || app.cssWidth));
     const logicalHeight = Math.max(1, Math.round(session.initialCanvas?.height || app.cssHeight));
     const canvas = document.createElement('canvas');
@@ -517,11 +547,11 @@
     const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, logicalWidth, logicalHeight);
     ctx.lineCap = ctx.lineJoin = 'round';
-    const config = session.events.find(e => e.type === 'config')?.state;
+    const config = initialState || session.events.find(e => e.type === 'config')?.state;
     const replay = {
       state: cloneState(config), cssWidth: logicalWidth, cssHeight: logicalHeight,
       activeTouches: new Map(), particles: [], echoQueue: [], orbitPhase: 0,
-      now: 0, random: makeRandom(session.randomSeed || 1), clockNow: () => replay.now,
+      now: 0, random: makeRandom(randomSeed ?? session.randomSeed ?? 1), clockNow: () => replay.now,
       paintMark(mark, allowEcho = true) {
         for (const m of B.transformMarks(this, mark)) {
           drawMark(ctx, m, this);
@@ -558,7 +588,12 @@
     if (event.type === 'behavior-all') { Object.keys(replay.state.behaviors).forEach(k => replay.state.behaviors[k] = !!event.enabled); return; }
     if (event.type === 'color') { replay.state.color = event.color; return; }
     if (event.type === 'size') { replay.state.size = Number(event.size) || replay.state.size; return; }
-    if (event.type === 'clear') { clearReplay(replay, ctx); return; }
+    if (event.type === 'clear') {
+      clearReplay(replay, ctx);
+      if (event.state) replay.state = cloneState(event.state);
+      if (event.randomSeed != null) replay.random = makeRandom(event.randomSeed);
+      return;
+    }
     if (event.type === 'canvas-size' && event.preserve === false) { clearReplay(replay, ctx); return; }
     if (!['down','move','up','cancel'].includes(event.type)) return;
 
@@ -589,22 +624,79 @@
     B.scatterFromSegment(replay,t,distance); B.sprayFromSegment(replay,t,distance); B.bloomFromSegment(replay,t,distance); B.driftFromSegment(replay,t,distance); B.orbitFromSegment(replay,t,distance);
   }
 
+  function stateAtEventIndex(events, endIndex) {
+    const config = events.find(e => e.type === 'config')?.state;
+    const state = cloneState(config);
+    const limit = Math.min(endIndex, events.length - 1);
+    for (let i = 0; i <= limit; i++) {
+      const event = events[i];
+      if (event.type === 'config' && event.state) {
+        const next = cloneState(event.state);
+        state.color = next.color; state.size = next.size; state.hue = next.hue; state.behaviors = next.behaviors;
+      } else if (event.type === 'behavior' && event.behavior in state.behaviors) {
+        state.behaviors[event.behavior] = !!event.enabled;
+      } else if (event.type === 'behavior-all') {
+        Object.keys(state.behaviors).forEach(k => state.behaviors[k] = !!event.enabled);
+      } else if (event.type === 'color') {
+        state.color = event.color;
+      } else if (event.type === 'size') {
+        state.size = Number(event.size) || state.size;
+      } else if (event.type === 'clear' && event.state) {
+        const next = cloneState(event.state);
+        state.color = next.color; state.size = next.size; state.hue = next.hue; state.behaviors = next.behaviors;
+      }
+    }
+    return state;
+  }
+
   async function renderPerformanceGif() {
     if (gifResult.rendering || !window.CanvassGifEncoder) return;
-    const artistic = app.session?.events?.filter(e => ['down','move','up','cancel','clear','behavior','behavior-all','color','size','canvas-size'].includes(e.type)) || [];
+    const events = app.session?.events || [];
+    const artisticTypes = new Set(['down','move','up','cancel','clear','behavior','behavior-all','color','size','canvas-size']);
+
+    let lastClearIndex = -1;
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].type === 'clear') { lastClearIndex = i; break; }
+    }
+
+    let startIndex;
+    let boundaryTime;
+    let initialState;
+    let replaySeed;
+    let replayCanvas = app.session?.initialCanvas;
+
+    if (lastClearIndex >= 0) {
+      const clearEvent = events[lastClearIndex];
+      startIndex = lastClearIndex + 1;
+      boundaryTime = clearEvent.t;
+      initialState = clearEvent.state ? cloneState(clearEvent.state) : stateAtEventIndex(events, lastClearIndex);
+      replaySeed = clearEvent.randomSeed ?? app.session.randomSeed;
+      if (clearEvent.canvas?.width && clearEvent.canvas?.height) replayCanvas = clearEvent.canvas;
+    } else {
+      const firstDownIndex = events.findIndex(e => e.type === 'down');
+      if (firstDownIndex < 0) { alert('Make some marks before rendering a performance GIF.'); return; }
+      startIndex = firstDownIndex;
+      boundaryTime = events[firstDownIndex].t;
+      initialState = stateAtEventIndex(events, firstDownIndex);
+      replaySeed = app.session.randomSeed;
+    }
+
+    const postBoundaryEvents = events.slice(startIndex);
+    const artistic = postBoundaryEvents.filter(e => artisticTypes.has(e.type));
     const firstDown = artistic.find(e => e.type === 'down');
-    if (!firstDown) { alert('Make some marks before rendering a performance GIF.'); return; }
+    if (!firstDown) { alert('Make some marks after the most recent Clear before rendering a performance GIF.'); return; }
 
     clearGifResult(); gifResult.rendering = true; gifRenderBtn.disabled = true;
     gifRenderBtn.textContent = 'Rendering…'; gifRenderStatus.hidden = false; gifRenderStatus.textContent = 'Replaying performance…';
     gifProgressBar.style.width = '0%'; gifDialog.showModal();
 
-    const sourceEvents = app.session.events.map(e => ({...e, t:Math.max(0,e.t-firstDown.t)})).filter(e => e.t >= 0);
+    const sourceEvents = postBoundaryEvents.map(e => ({...e, t:Math.max(0,e.t-boundaryTime)}));
     const lastArt = artistic[artistic.length - 1];
-    const naturalDuration = Math.max(250, lastArt.t - firstDown.t + GIF_TAIL_MS);
+    const naturalDuration = Math.max(250, lastArt.t - boundaryTime + GIF_TAIL_MS);
     const frameDelay = Math.max(GIF_FRAME_DELAY, Math.ceil(naturalDuration / GIF_MAX_FRAMES / 10) * 10);
     const duration = naturalDuration;
-    const { replay, canvas, ctx } = makeReplay(app.session);
+    const replaySession = { ...app.session, initialCanvas: replayCanvas || app.session.initialCanvas };
+    const { replay, canvas, ctx } = makeReplay(replaySession, initialState, replaySeed);
     const scale=Math.min(1,GIF_MAX_DIMENSION/Math.max(canvas.width,canvas.height));
     const outW=Math.max(1,Math.round(canvas.width*scale)), outH=Math.max(1,Math.round(canvas.height*scale));
     const out=document.createElement('canvas'); out.width=outW; out.height=outH;
@@ -661,7 +753,15 @@
     if (startNew) {
       sessionPerfStart = performance.now();
       beginSession();
-    } else record('clear');
+    } else {
+      app.randomSeed = newSeed();
+      app.random = makeRandom(app.randomSeed);
+      record('clear', {
+        state: snapshotState(),
+        randomSeed: app.randomSeed,
+        canvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } }
+      });
+    }
   }
 
   document.getElementById('clearBtn').addEventListener('click', () => clearCanvas(false));
