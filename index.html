@@ -167,8 +167,12 @@
   <dialog id="gifDialog" class="gif-dialog">
     <div class="gif-card">
       <div class="gif-preview-wrap">
+        <span class="gif-preview-label" aria-hidden="true">GIF Preview</span>
         <img id="gifPreview" alt="Preview of rendered Canvass performance" hidden />
-        <div id="gifRenderStatus" class="gif-render-status" role="status" aria-live="polite">Preparing GIF…</div>
+        <div id="gifRenderStatus" class="gif-render-status" role="status" aria-live="polite">
+          <span class="gif-render-spinner" aria-hidden="true"></span>
+          <span>Preparing GIF…</span>
+        </div>
       </div>
       <div class="gif-progress" aria-hidden="true"><span id="gifProgressBar"></span></div>
       <p id="gifMeta" class="gif-meta"></p>
