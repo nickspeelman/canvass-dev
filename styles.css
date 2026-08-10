@@ -93,7 +93,8 @@ button { -webkit-tap-highlight-color: transparent; }
   .actions { gap: 4px; }
   .actions .utility { min-width: 0; padding-inline: 7px; }
   #fullscreenBtn { display: none; }
-  .effects-menu { left: 0; }
+  .effects-control { position: static; }
+  .effects-menu { left: 50%; transform: translateX(-50%); }
   .behaviors { grid-template-columns: repeat(2, minmax(88px, 1fr)); }
   .popover-heading { align-items: flex-start; }
   .bulk-actions { flex-direction: column; gap: 2px; align-items: flex-end; }
