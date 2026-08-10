@@ -1,4 +1,4 @@
-const CACHE_NAME = "canvass-shell-v1.9.10";
+const CACHE_NAME = "canvass-shell-v1.9.11";
 const APP_VERSION = CACHE_NAME.replace("canvass-shell-v", "");
 
 const APP_SHELL = [
@@ -56,17 +56,20 @@ self.addEventListener("fetch", event => {
     return;
   }
 
+  // Network-first for same-origin app assets. This keeps deployed HTML, CSS, and
+  // JavaScript on the same release while preserving the cache as an offline
+  // fallback. A cache-first strategy can otherwise mix a newly fetched page
+  // with stale CSS/JS from the previous service-worker cache.
   event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
-      return fetch(request).then(response => {
+    fetch(request)
+      .then(response => {
         if (response.ok && response.type === "basic") {
           const copy = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
         }
         return response;
-      });
-    })
+      })
+      .catch(() => caches.match(request))
   );
 });
 

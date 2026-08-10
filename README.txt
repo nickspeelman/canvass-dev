@@ -1,4 +1,4 @@
-CANVASS — v1.9.10
+CANVASS — v1.9.11
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -80,3 +80,10 @@ CUSTOM COLOR PICKER (v1.9.9)
 - Restored the original browser-native visual color picker used before the mobile-centering changes.
 - Kept Hex/RGB text entry.
 - Mobile centering now affects only the popover container; the picker itself is unchanged.
+
+
+DEPLOYMENT CACHE COHERENCE (v1.9.11)
+------------------------------------
+- Same-origin app assets now use network-first loading with cached offline fallback.
+- When an updated service worker takes control, the page reloads automatically once.
+- This prevents a newly deployed index from being paired with stale CSS/JavaScript from an older cached release.

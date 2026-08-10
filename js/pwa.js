@@ -29,10 +29,12 @@
       const registration = await navigator.serviceWorker.register("service-worker.js");
       await requestVersion(registration.active || registration.waiting || registration.installing);
 
-      // If this page was loaded under an older controlling worker, ask again once
-      // the newly installed worker takes control.
+      // If this page was loaded under an older controlling worker, reload once
+      // the newly installed worker takes control. The fresh controller then
+      // fetches the matching deployed CSS/JS instead of leaving a mixed build
+      // visible until the user manually refreshes.
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        requestVersion(navigator.serviceWorker.controller);
+        window.location.reload();
       }, { once: true });
     } catch (_) {
       if (versionEl) versionEl.textContent = "Version unavailable";
