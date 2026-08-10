@@ -64,7 +64,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 2,
-      engineVersion: '1.9.5',
+      engineVersion: '1.9.7',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -487,6 +487,7 @@
   document.addEventListener('pointerdown', e => {
     if (!e.target.closest('.popover-wrap')) closePopovers();
   });
+  setCustomColor('#7b61ff', false);
   updateEffectsCount();
 
   document.querySelectorAll('.size').forEach(btn => {

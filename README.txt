@@ -1,11 +1,11 @@
-CANVASS — v1.9.5
+CANVASS — v1.9.7
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
 BASELINE
 - True multi-touch pointer drawing
 - Compact touchscreen-responsive control bar
-- Red / yellow / blue plus a custom color picker with hex/RGB input
+- Red / yellow / blue plus a visual custom color field with hex/RGB input
 - Small / medium / large brushes
 - Local persistence
 - One-tap Save Image button during drawing
@@ -69,7 +69,14 @@ PERFORMANCE GIF — v1.9.1
 - Start again begins a new performance/session log. The session JSON download contains the replay data and random seed.
 
 
-GIF CLEAR BOUNDARY (v1.9.5)
+GIF CLEAR BOUNDARY (v1.9.6)
 - Render GIF always begins at the most recent Clear action.
 - Anything drawn or configured before that Clear is excluded from the exported timeline.
 - Clear captures the active tool/effect state, current canvas dimensions, and a fresh deterministic random seed so stochastic effects replay consistently after the boundary.
+
+
+CUSTOM COLOR PICKER (v1.9.7)
+----------------------------
+- Restored the original browser-native visual color picker used before the mobile-centering changes.
+- Kept Hex/RGB text entry.
+- Mobile centering now affects only the popover container; the picker itself is unchanged.
