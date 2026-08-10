@@ -1,4 +1,4 @@
-CANVAS — v1.9.17
+CANVAS — v1.9.19
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -98,3 +98,16 @@ BRANDING + SEO — v1.9.17
 - Added robots.txt and sitemap.xml.
 - Social preview image expected at assets/icons/canvas-social.png (1200 × 627).
 - Downloaded PNG, GIF, and session JSON filenames now use the canvas- prefix.
+
+
+FINISH ACTIONS — v1.9.18
+------------------------
+- Finish dialog now includes Render GIF, using the existing performance GIF renderer unchanged.
+- Finish dialog now includes Share, which uses the native Web Share API to share the finished PNG where supported.
+- Finish > Download image now performs a direct PNG download on mobile instead of invoking the share sheet.
+
+
+GIF MODAL RETURN — v1.9.19
+--------------------------
+- When Render GIF is launched from Finish, closing the GIF modal now returns to the Finish modal.
+- GIF rendering launched from the normal GIF control retains its prior close behavior.

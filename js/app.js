@@ -66,7 +66,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 2,
-      engineVersion: '1.9.17',
+      engineVersion: '1.9.19',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -681,6 +681,7 @@
   });
 
   const gifRenderBtn = document.getElementById('gifRenderBtn');
+  let gifOpenedFromFinish = false;
   const gifDialog = document.getElementById('gifDialog');
   const gifPreview = document.getElementById('gifPreview');
   const gifRenderStatus = document.getElementById('gifRenderStatus');
@@ -922,7 +923,16 @@
     }
   }
 
-  gifRenderBtn.addEventListener('click', renderPerformanceGif);
+  gifRenderBtn.addEventListener('click', () => {
+    gifOpenedFromFinish = false;
+    renderPerformanceGif();
+  });
+  document.getElementById('finishGifBtn').addEventListener('click', () => {
+    // Remember the launch context so closing the GIF modal can return here.
+    gifOpenedFromFinish = true;
+    if (finishDialog?.open) finishDialog.close();
+    renderPerformanceGif();
+  });
   downloadGifBtn.addEventListener('click', async () => {
     if (!gifResult.blob) return;
     const saved = await saveBlobForUser(gifResult.blob, `canvas-performance-${timestampName()}.gif`);
@@ -966,6 +976,12 @@
   document.getElementById('clearBtn').addEventListener('click', () => clearCanvas(false));
 
   const finishDialog = document.getElementById('finishDialog');
+  gifDialog.addEventListener('close', () => {
+    if (gifOpenedFromFinish) {
+      gifOpenedFromFinish = false;
+      finishDialog.showModal();
+    }
+  });
   const previewImage = document.getElementById('previewImage');
   document.getElementById('finishBtn').addEventListener('click', () => {
     saveDrawing();
@@ -1072,7 +1088,63 @@
   });
 
   document.getElementById('downloadBtn').addEventListener('click', () => {
-    saveImageDownload('finish-dialog');
+    // Finish > Download should always be a download, including on mobile.
+    // Sharing is a separate explicit action below.
+    saveDrawing();
+    const canvas = exportCanvas();
+    const filename = `canvas-${timestampName()}.png`;
+
+    try {
+      if (isMobileSaveEnvironment()) {
+        // Keep creation + download in the original tap for mobile user activation.
+        const blob = dataUrlToBlob(canvas.toDataURL('image/png'));
+        downloadBlob(blob, filename);
+        record('download-image', { source: 'finish-dialog', direct: true });
+        return;
+      }
+
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        downloadBlob(blob, filename);
+        record('download-image', { source: 'finish-dialog', direct: true });
+      }, 'image/png');
+    } catch (error) {
+      console.error('Could not prepare image for download.', error);
+    }
+  });
+
+  document.getElementById('shareBtn').addEventListener('click', async () => {
+    saveDrawing();
+    const canvas = exportCanvas();
+    const filename = `canvas-${timestampName()}.png`;
+
+    if (typeof File !== 'function' || typeof navigator.share !== 'function') {
+      alert('Sharing is not supported by this browser. You can download the image instead.');
+      return;
+    }
+
+    try {
+      // Using a data URL here keeps file preparation synchronous with the user tap,
+      // which is important for mobile Web Share implementations.
+      const blob = dataUrlToBlob(canvas.toDataURL('image/png'));
+      const file = new File([blob], filename, { type: 'image/png' });
+
+      if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+        alert('This browser cannot share image files. You can download the image instead.');
+        return;
+      }
+
+      await navigator.share({
+        files: [file],
+        title: 'Canvas drawing'
+      });
+      record('share-image', { source: 'finish-dialog' });
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('Could not share image.', error);
+        alert('Could not share the image. You can download it instead.');
+      }
+    }
   });
 
   document.getElementById('downloadSessionBtn').addEventListener('click', () => {
