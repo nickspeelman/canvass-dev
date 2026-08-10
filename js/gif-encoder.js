@@ -173,5 +173,5 @@
     return sink.blob('image/gif');
   }
 
-  window.CanvassGifEncoder = { quantize, encode };
+  window.CanvasGifEncoder = { quantize, encode };
 })();

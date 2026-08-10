@@ -1,15 +1,18 @@
 {
-  "name": "Canvass",
-  "short_name": "Canvass",
-  "description": "An experimental multitouch drawing instrument for combining gesture, color, and composable effects.",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "name": "Canvas",
+  "short_name": "Canvas",
+  "description": "A free experimental multitouch drawing instrument for combining gesture, color, and composable effects.",
+  "id": "https://canvas.nickspeelman.com/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
-  "categories": ["graphics_design", "entertainment"],
+  "categories": [
+    "graphics_design",
+    "entertainment"
+  ],
   "icons": [
     {
       "src": "android-chrome-192x192.png",

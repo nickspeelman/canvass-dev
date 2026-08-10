@@ -12,18 +12,84 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="description" content="Canvass is an experimental multitouch drawing instrument for combining gesture, color, and composable effects." />
-  <meta name="application-name" content="Canvass" />
+  <meta name="color-scheme" content="light" />
+
+  <title>Canvas — Experimental Multitouch Drawing Instrument</title>
+  <meta name="description" content="Canvas is a free experimental multitouch drawing instrument by Nick Speelman. Combine gesture, color, and composable effects to create digital artwork in your browser." />
+  <meta name="author" content="Nick Speelman" />
+  <meta name="application-name" content="Canvas" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <link rel="canonical" href="https://canvas.nickspeelman.com/" />
+
+  <!-- Open Graph / LinkedIn / social sharing -->
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:site_name" content="Canvas" />
+  <meta property="og:title" content="Canvas — Experimental Multitouch Drawing Instrument" />
+  <meta property="og:description" content="A free experimental multitouch drawing instrument for combining gesture, color, and composable effects directly in your browser." />
+  <meta property="og:url" content="https://canvas.nickspeelman.com/" />
+  <meta property="og:image" content="https://canvas.nickspeelman.com/assets/icons/canvas-social.png" />
+  <meta property="og:image:secure_url" content="https://canvas.nickspeelman.com/assets/icons/canvas-social.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="627" />
+  <meta property="og:image:alt" content="Canvas, an experimental multitouch drawing instrument by Nick Speelman" />
+
+  <!-- X / Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Canvas — Experimental Multitouch Drawing Instrument" />
+  <meta name="twitter:description" content="A free experimental multitouch drawing instrument for combining gesture, color, and composable effects directly in your browser." />
+  <meta name="twitter:image" content="https://canvas.nickspeelman.com/assets/icons/canvas-social.png" />
+  <meta name="twitter:image:alt" content="Canvas, an experimental multitouch drawing instrument by Nick Speelman" />
+
+  <!-- PWA / platform metadata -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Canvass" />
+  <meta name="apple-mobile-web-app-title" content="Canvas" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Canvass — Touch Drawing Instrument</title>
+
+  <!-- Favicons / app icons -->
+  <link rel="icon" href="assets/icons/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="48x48" href="assets/icons/favicon-48.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16x16.png" />
-  <link rel="shortcut icon" href="assets/icons/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png" />
   <link rel="manifest" href="assets/icons/site.webmanifest" />
+
+  <!-- Structured data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Canvas",
+    "url": "https://canvas.nickspeelman.com/",
+    "description": "A free experimental multitouch drawing instrument for combining gesture, color, and composable effects directly in the browser.",
+    "applicationCategory": "DesignApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires a modern browser with JavaScript and Canvas support.",
+    "isAccessibleForFree": true,
+    "image": "https://canvas.nickspeelman.com/assets/icons/canvas-social.png",
+    "author": {
+      "@type": "Person",
+      "name": "Nick Speelman",
+      "url": "https://nickspeelman.com/"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Multitouch drawing",
+      "Composable drawing effects",
+      "Custom color selection",
+      "PNG image export",
+      "Animated GIF performance rendering",
+      "Offline-capable progressive web app"
+    ]
+  }
+  </script>
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -37,9 +103,9 @@
     <section class="controls" aria-label="Instrument controls">
       <div class="control-row tools">
         <div class="brand-group">
-          <div class="brand" aria-label="Canvass">
+          <div class="brand" aria-label="Canvas">
             <img class="brand-mark" src="assets/icons/favicon-32x32.png" width="32" height="32" alt="" />
-            <span class="brand-name">Canvass</span>
+            <span class="brand-name">Canvas</span>
           </div>
           <button id="aboutBtn" type="button" class="about-trigger" aria-haspopup="dialog">About</button>
         </div>
@@ -124,12 +190,12 @@
       <div class="about-heading">
         <img src="assets/icons/favicon-32x32.png" width="38" height="38" alt="" />
         <div>
-          <h2>Canvass</h2>
+          <h2>Canvas</h2>
           <p class="about-subtitle">An experimental touch-drawing instrument</p>
         </div>
       </div>
-      <p>Canvass grew out of a simple paint program I made for a friend’s kid. While watching it in use, I noticed unexpected effects emerging from multitouch gestures and a handful of simple drawing rules.</p>
-      <p>I started following those accidents on purpose. Canvass is the result: a drawing instrument built around surprising interactions between simple sets of rules.</p>
+      <p>Canvas grew out of a simple paint program I made for a friend’s kid. While watching it in use, I noticed unexpected effects emerging from multitouch gestures and a handful of simple drawing rules.</p>
+      <p>I started following those accidents on purpose. Canvas is the result: a drawing instrument built around surprising interactions between simple sets of rules.</p>
       <p>If you have issues, questions or other feedback, you can contact me at <a href="mailto:nick@nickspeelman.com">nick@nickspeelman.com</a></p>
       <div class="about-footer">
         <span id="appVersion" class="app-version" aria-live="polite">Version …</span>
@@ -169,7 +235,7 @@
     <div class="gif-card">
       <div class="gif-preview-wrap">
         <span class="gif-preview-label" aria-hidden="true">GIF Preview</span>
-        <img id="gifPreview" alt="Preview of rendered Canvass performance" hidden />
+        <img id="gifPreview" alt="Preview of rendered Canvas performance" hidden />
         <div id="gifRenderStatus" class="gif-render-status" role="status" aria-live="polite">
           <span class="gif-render-spinner" aria-hidden="true"></span>
           <span>Preparing GIF…</span>

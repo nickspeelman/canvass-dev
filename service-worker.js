@@ -1,5 +1,5 @@
-const CACHE_NAME = "canvass-shell-v1.9.16";
-const APP_VERSION = CACHE_NAME.replace("canvass-shell-v", "");
+const CACHE_NAME = "canvas-shell-v1.9.17";
+const APP_VERSION = CACHE_NAME.replace("canvas-shell-v", "");
 
 const APP_SHELL = [
   "./",
@@ -85,8 +85,8 @@ self.addEventListener("fetch", event => {
 
 
 self.addEventListener("message", event => {
-  if (event.data?.type !== "CANVASS_VERSION_REQUEST") return;
-  const reply = { type: "CANVASS_VERSION", version: APP_VERSION };
+  if (event.data?.type !== "CANVAS_VERSION_REQUEST") return;
+  const reply = { type: "CANVAS_VERSION", version: APP_VERSION };
   if (event.ports?.[0]) event.ports[0].postMessage(reply);
   else event.source?.postMessage(reply);
 });

@@ -15,7 +15,7 @@
         if (version) showVersion(version);
         resolve(Boolean(version));
       };
-      worker.postMessage({ type: "CANVASS_VERSION_REQUEST" }, [channel.port2]);
+      worker.postMessage({ type: "CANVAS_VERSION_REQUEST" }, [channel.port2]);
     });
   }
 

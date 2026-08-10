@@ -1,4 +1,4 @@
-CANVASS — v1.9.11
+CANVAS — v1.9.17
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -49,8 +49,8 @@ NOTES
 
 
 BRANDING + PWA — v1.7
-- Product name: Canvass
-- Compact Canvass logo/wordmark added to the instrument controls
+- Product name: Canvas
+- Compact Canvas logo/wordmark added to the instrument controls
 - Browser favicon, Apple touch icon, and Android/PWA icons wired into the document
 - Web app manifest configured for standalone installation
 - Service worker caches the local app shell for offline use after the first successful load
@@ -59,7 +59,7 @@ BRANDING + PWA — v1.7
 
 
 PERFORMANCE GIF — v1.9.1
-- Canvass continuously records a lightweight performance log: timestamped touch/pointer events plus color, brush-size, effect, clear, and canvas-setting changes.
+- Canvas continuously records a lightweight performance log: timestamped touch/pointer events plus color, brush-size, effect, clear, and canvas-setting changes.
 - Render GIF reconstructs the current performance after the fact; there is no live GIF recording mode.
 - Stochastic effects use a session seed, so Scatter, Spray, Bloom, and Bleed make the same random choices during replay.
 - Flow and Echo use the recorded performance clock so their timing is replayable.
@@ -87,3 +87,14 @@ DEPLOYMENT CACHE COHERENCE (v1.9.11)
 - Same-origin app assets now use network-first loading with cached offline fallback.
 - When an updated service worker takes control, the page reloads automatically once.
 - This prevents a newly deployed index from being paired with stale CSS/JavaScript from an older cached release.
+
+
+BRANDING + SEO — v1.9.17
+------------------------
+- Product name and public hostname restored to Canvas / canvas.nickspeelman.com.
+- Added canonical URL, search-engine robots directives, Open Graph metadata, LinkedIn-friendly social preview metadata, and X/Twitter large-card metadata.
+- Added Schema.org WebApplication JSON-LD structured data.
+- Added favicon-48.png reference alongside the existing favicon, Apple touch icon, and Android/PWA icons.
+- Added robots.txt and sitemap.xml.
+- Social preview image expected at assets/icons/canvas-social.png (1200 × 627).
+- Downloaded PNG, GIF, and session JSON filenames now use the canvas- prefix.

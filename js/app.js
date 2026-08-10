@@ -66,7 +66,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 2,
-      engineVersion: '1.9.16',
+      engineVersion: '1.9.17',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -832,7 +832,7 @@
   }
 
   async function renderPerformanceGif() {
-    if (gifResult.rendering || !window.CanvassGifEncoder) return;
+    if (gifResult.rendering || !window.CanvasGifEncoder) return;
     const events = app.session?.events || [];
     const artisticTypes = new Set(['down','move','up','cancel','clear','behavior','behavior-all','color','size','canvas-size']);
 
@@ -891,7 +891,7 @@
       processReplayEchoes(replay); B.updateParticles(replay,simStep/1000);
       if (simTime + 0.01 >= nextFrame) {
         outCtx.fillStyle='#fff'; outCtx.fillRect(0,0,outW,outH); outCtx.drawImage(canvas,0,0,outW,outH);
-        frames.push(window.CanvassGifEncoder.quantize(outCtx.getImageData(0,0,outW,outH)));
+        frames.push(window.CanvasGifEncoder.quantize(outCtx.getImageData(0,0,outW,outH)));
         nextFrame += frameDelay;
       }
       simTime += simStep;
@@ -909,7 +909,7 @@
 
     gifRenderStatus.textContent='Encoding GIF…';
     try {
-      const blob=await window.CanvassGifEncoder.encode({width:outW,height:outH,frames,delayMs:frameDelay,repeat:0,shouldCancel:()=>gifResult.cancelled,onProgress:p=>{gifProgressBar.style.width=`${45+Math.round(p*55)}%`; gifRenderStatus.textContent=`Encoding GIF… ${Math.round(p*100)}%`;}});
+      const blob=await window.CanvasGifEncoder.encode({width:outW,height:outH,frames,delayMs:frameDelay,repeat:0,shouldCancel:()=>gifResult.cancelled,onProgress:p=>{gifProgressBar.style.width=`${45+Math.round(p*55)}%`; gifRenderStatus.textContent=`Encoding GIF… ${Math.round(p*100)}%`;}});
       gifResult.blob=blob; gifResult.url=URL.createObjectURL(blob); gifPreview.src=gifResult.url; gifPreview.hidden=false;
       gifRenderStatus.hidden=true; gifProgressBar.style.width='100%';
       gifMeta.textContent=`${formatDuration(duration)} performance • ${frames.length} frames • ${outW} × ${outH} • ${formatBytes(blob.size)}`;
@@ -925,7 +925,7 @@
   gifRenderBtn.addEventListener('click', renderPerformanceGif);
   downloadGifBtn.addEventListener('click', async () => {
     if (!gifResult.blob) return;
-    const saved = await saveBlobForUser(gifResult.blob, `canvass-performance-${timestampName()}.gif`);
+    const saved = await saveBlobForUser(gifResult.blob, `canvas-performance-${timestampName()}.gif`);
     if (saved) record('download-gif', { bytes: gifResult.blob.size });
   });
   document.getElementById('closeGifBtn').addEventListener('click', () => {
@@ -1043,7 +1043,7 @@
   function saveImageDownload(source = 'save-button') {
     saveDrawing();
     const canvas = exportCanvas();
-    const filename = `canvass-${timestampName()}.png`;
+    const filename = `canvas-${timestampName()}.png`;
 
     if (isMobileSaveEnvironment()) {
       // Keep file creation inside the original tap. Delaying it through
@@ -1077,7 +1077,7 @@
 
   document.getElementById('downloadSessionBtn').addEventListener('click', () => {
     const exportSession = { ...app.session, endedAt: new Date().toISOString(), finalState: snapshotState() };
-    downloadBlob(new Blob([JSON.stringify(exportSession, null, 2)], { type: 'application/json' }), `canvass-session-${timestampName()}.json`);
+    downloadBlob(new Blob([JSON.stringify(exportSession, null, 2)], { type: 'application/json' }), `canvas-session-${timestampName()}.json`);
     record('download-session');
   });
 
