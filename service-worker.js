@@ -1,4 +1,4 @@
-const CACHE_NAME = "canvas-shell-v1.9.26";
+const CACHE_NAME = "canvas-shell-v1.9.27";
 const APP_VERSION = CACHE_NAME.replace("canvas-shell-v", "");
 
 const APP_SHELL = [

@@ -286,7 +286,13 @@
         else dialog.removeAttribute("open");
       };
 
-      openButton?.addEventListener("click", openAbout);
+      openButton?.addEventListener("click", () => {
+        openAbout();
+        if (typeof window.gtag === "function") window.gtag("event", "about_opened");
+      });
+      document.querySelector('.about-support a[href^="/donate"]')?.addEventListener("click", () => {
+        if (typeof window.gtag === "function") window.gtag("event", "donate_clicked");
+      });
       closeButton?.addEventListener("click", closeAbout);
       dialog?.addEventListener("click", event => {
         if (event.target === dialog) closeAbout();

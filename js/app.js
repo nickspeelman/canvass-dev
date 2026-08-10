@@ -84,6 +84,17 @@
     };
   }
 
+  // Canvas records a very detailed local event stream so GIF replay and
+  // session export remain exact. Google Analytics gets only a small, useful
+  // subset of those events; pointer moves and other high-volume replay data
+  // deliberately stay local.
+  function analyticsEvent(name, params = {}) {
+    if (typeof window.gtag !== 'function') return;
+    window.gtag('event', name, params);
+  }
+
+  let analyticsArtworkStarted = false;
+
   function record(type, data = {}) {
     if (!app.session) return;
     app.session.events.push({
@@ -91,6 +102,58 @@
       type,
       ...data
     });
+
+    switch (type) {
+      case 'down':
+        if (!analyticsArtworkStarted) {
+          analyticsArtworkStarted = true;
+          analyticsEvent('drawing_started');
+        }
+        break;
+      case 'behavior':
+        analyticsEvent('effect_toggled', { effect_name: data.behavior, enabled: data.enabled });
+        break;
+      case 'behavior-all':
+        analyticsEvent('effects_bulk_changed', { enabled: data.enabled });
+        break;
+      case 'color':
+        analyticsEvent('color_changed', { color_value: data.color });
+        break;
+      case 'size':
+        analyticsEvent('brush_size_changed', { brush_size: data.size });
+        break;
+      case 'undo':
+        analyticsEvent('undo_used');
+        break;
+      case 'clear':
+        analyticsArtworkStarted = false;
+        analyticsEvent('canvas_cleared');
+        break;
+      case 'finish':
+        analyticsEvent('finish_opened');
+        break;
+      case 'gif-ready':
+        analyticsEvent('gif_render_completed', { file_bytes: data.bytes });
+        break;
+      case 'download-gif':
+        analyticsEvent('gif_downloaded', { file_bytes: data.bytes });
+        break;
+      case 'download-image':
+        analyticsEvent('image_downloaded', { source: data.source || 'unknown' });
+        break;
+      case 'share-image':
+        analyticsEvent('image_shared', { source: data.source || 'unknown' });
+        break;
+      case 'download-session':
+        analyticsEvent('session_downloaded');
+        break;
+      case 'canvas-size':
+        analyticsEvent('canvas_size_changed', {
+          canvas_mode: data.spec?.mode || 'unknown',
+          preserve_artwork: data.preserve
+        });
+        break;
+    }
   }
 
   let sessionPerfStart = performance.now();
@@ -870,6 +933,7 @@
     if (!firstDown) { alert('Make some marks after the most recent Clear before rendering a performance GIF.'); return; }
 
     clearGifResult(); gifResult.rendering = true; gifResult.cancelled = false; gifRenderBtn.disabled = true;
+    analyticsEvent('gif_render_started');
     gifRenderBtn.textContent = 'Rendering…'; gifRenderStatus.hidden = false; gifRenderStatus.textContent = 'Replaying performance…';
     gifProgressBar.style.width = '0%'; gifDialog.showModal();
 
@@ -961,6 +1025,8 @@
     localStorage.removeItem('touch-instrument-image-v1');
     hint.classList.remove('hidden');
     if (startNew) {
+      analyticsArtworkStarted = false;
+      analyticsEvent('new_canvas_started');
       sessionPerfStart = performance.now();
       beginSession();
     } else {
