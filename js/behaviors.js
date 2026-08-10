@@ -65,7 +65,7 @@
   }
 
   function flowPoint(x, y, app) {
-    const t = performance.now() * 0.00022;
+    const t = ((app.clockNow ? app.clockNow() : performance.now())) * 0.00022;
     const sx = x / Math.max(1, app.cssWidth);
     const sy = y / Math.max(1, app.cssHeight);
     const angle = Math.sin(sx * 9.3 + sy * 5.1 + t * 2.1) * 2.2 + Math.cos(sy * 8.4 - sx * 3.7 - t) * 1.35;
@@ -137,7 +137,7 @@
 
     scheduleEchoes(app, mark) {
       if (!app.state.behaviors.echo || mark.noEcho) return;
-      const now = performance.now();
+      const now = app.clockNow ? app.clockNow() : performance.now();
       for (const delay of this.echoDelays) app.echoQueue.push({ at: now + delay, mark: { ...mark, echoed: true } });
     },
 
@@ -153,14 +153,14 @@
         for (let i = 0; i < samples; i++) {
           const t = samples === 1 ? 0.5 : i / (samples - 1);
           const x = mark.x1 + dx * t, y = mark.y1 + dy * t;
-          app.particles.push({ x, y, vx:0, vy:0, life:1.15 + Math.random()*1.05, age:0,
-            radius:Math.max(5, (mark.width || app.state.size) * (0.55 + Math.random()*0.35)),
-            color:baseColor, lastX:x, lastY:y, kind:'bleed', seed:Math.random()*1000 });
+          app.particles.push({ x, y, vx:0, vy:0, life:1.15 + (app.random ? app.random() : Math.random())*1.05, age:0,
+            radius:Math.max(5, (mark.width || app.state.size) * (0.55 + (app.random ? app.random() : Math.random())*0.35)),
+            color:baseColor, lastX:x, lastY:y, kind:'bleed', seed:(app.random ? app.random() : Math.random())*1000 });
         }
       } else {
-        app.particles.push({ x:mark.x, y:mark.y, vx:0, vy:0, life:1.25 + Math.random()*1.0, age:0,
-          radius:Math.max(5, (mark.width || app.state.size) * (0.6 + Math.random()*0.35)),
-          color:baseColor, lastX:mark.x, lastY:mark.y, kind:'bleed', seed:Math.random()*1000 });
+        app.particles.push({ x:mark.x, y:mark.y, vx:0, vy:0, life:1.25 + (app.random ? app.random() : Math.random())*1.0, age:0,
+          radius:Math.max(5, (mark.width || app.state.size) * (0.6 + (app.random ? app.random() : Math.random())*0.35)),
+          color:baseColor, lastX:mark.x, lastY:mark.y, kind:'bleed', seed:(app.random ? app.random() : Math.random())*1000 });
       }
     },
 
@@ -170,11 +170,11 @@
       const speed = touch.speed || 0;
       const base = Math.min(6, 0.7 + speed * 0.035);
       for (let i = 0; i < count; i++) {
-        const t = Math.random(), x = touch.px + (touch.x - touch.px) * t, y = touch.py + (touch.y - touch.py) * t;
-        const angle = Math.random() * TAU, kick = base * (0.4 + Math.random());
+        const t = (app.random ? app.random() : Math.random()), x = touch.px + (touch.x - touch.px) * t, y = touch.py + (touch.y - touch.py) * t;
+        const angle = (app.random ? app.random() : Math.random()) * TAU, kick = base * (0.4 + (app.random ? app.random() : Math.random()));
         app.particles.push({ x, y, vx: Math.cos(angle)*kick, vy: Math.sin(angle)*kick,
-          life: 0.5 + Math.random()*1.1, age: 0,
-          radius: Math.max(1.2, app.state.size*(0.10 + Math.random()*0.12)),
+          life: 0.5 + (app.random ? app.random() : Math.random())*1.1, age: 0,
+          radius: Math.max(1.2, app.state.size*(0.10 + (app.random ? app.random() : Math.random())*0.12)),
           color: app.state.behaviors.cycle ? null : app.state.color, lastX:x, lastY:y, kind:'scatter' });
       }
     },
@@ -184,26 +184,26 @@
       const count = Math.min(34, Math.max(5, Math.floor(distance * 1.4)));
       const radius = Math.max(18, app.state.size * 2.8);
       for (let i = 0; i < count; i++) {
-        const t = Math.random();
+        const t = (app.random ? app.random() : Math.random());
         const cx = touch.px + (touch.x-touch.px)*t, cy = touch.py + (touch.y-touch.py)*t;
-        const a = Math.random()*TAU;
-        const r = radius * Math.pow(Math.random(), 1.8); // dense center, soft edge
+        const a = (app.random ? app.random() : Math.random())*TAU;
+        const r = radius * Math.pow((app.random ? app.random() : Math.random()), 1.8); // dense center, soft edge
         this.advanceHue(app, 0.7, 0.08);
         app.paintMark({ type:'dab', x:cx+Math.cos(a)*r, y:cy+Math.sin(a)*r,
-          width: Math.max(1.2, app.state.size*(0.08+Math.random()*0.13)),
-          color: app.state.behaviors.cycle ? null : app.state.color, alpha:0.22+Math.random()*0.34, noEcho:true }, false);
+          width: Math.max(1.2, app.state.size*(0.08+(app.random ? app.random() : Math.random())*0.13)),
+          color: app.state.behaviors.cycle ? null : app.state.color, alpha:0.22+(app.random ? app.random() : Math.random())*0.34, noEcho:true }, false);
       }
     },
 
     bloomFromSegment(app, touch, distance) {
       if (!app.state.behaviors.bloom || distance < 1.4) return;
       const chance = Math.min(0.85, distance / 12);
-      if (Math.random() > chance) return;
-      const t = Math.random();
+      if ((app.random ? app.random() : Math.random()) > chance) return;
+      const t = (app.random ? app.random() : Math.random());
       const x = touch.px+(touch.x-touch.px)*t, y = touch.py+(touch.y-touch.py)*t;
-      app.particles.push({ x,y,vx:0,vy:0,life:0.75+Math.random()*0.8,age:0,
-        radius:Math.max(8, app.state.size*(0.75+Math.random()*0.8)),
-        color:app.state.behaviors.cycle ? null : app.state.color,lastX:x,lastY:y,kind:'bloom',seed:Math.random()*1000 });
+      app.particles.push({ x,y,vx:0,vy:0,life:0.75+(app.random ? app.random() : Math.random())*0.8,age:0,
+        radius:Math.max(8, app.state.size*(0.75+(app.random ? app.random() : Math.random())*0.8)),
+        color:app.state.behaviors.cycle ? null : app.state.color,lastX:x,lastY:y,kind:'bloom',seed:(app.random ? app.random() : Math.random())*1000 });
     },
 
     driftFromSegment(app, touch, distance) {

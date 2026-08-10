@@ -1,4 +1,4 @@
-CANVASS — v1.8
+CANVASS — v1.9.1
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -58,10 +58,13 @@ BRANDING + PWA — v1.7
 - PWA display allows any orientation and respects device safe areas
 
 
-PERFORMANCE GIF — v1.8
-- Record GIF captures the artwork as it develops, including stochastic/emergent effects rather than trying to reconstruct the performance later.
-- Capture runs entirely client-side; no artwork is uploaded.
-- GIFs are recorded at 8 fps with a maximum output dimension of 480 px and a 30-second ceiling to keep capture practical on touchscreen devices.
-- Recording preserves the canvas aspect ratio and GIFs loop continuously.
-- Returning to another browser tab during capture ends the recording rather than producing a long throttled/background segment.
-- A post-recording dialog renders, previews, reports dimensions/file size, and downloads the finished GIF.
+PERFORMANCE GIF — v1.9.1
+- Canvass continuously records a lightweight performance log: timestamped touch/pointer events plus color, brush-size, effect, clear, and canvas-setting changes.
+- Render GIF reconstructs the current performance after the fact; there is no live GIF recording mode.
+- Stochastic effects use a session seed, so Scatter, Spray, Bloom, and Bleed make the same random choices during replay.
+- Flow and Echo use the recorded performance clock so their timing is replayable.
+- Rendering is entirely client-side; no artwork or performance data is uploaded.
+- GIF output preserves the performance timing, loops continuously, and is scaled to a maximum dimension of 480 px.
+- Long sessions are automatically sampled to a practical maximum frame count rather than imposing a performance-time limit.
+- Start again begins a new performance/session log. The session JSON download contains the replay data and random seed.
+

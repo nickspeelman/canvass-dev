@@ -1,4 +1,4 @@
-const CACHE_NAME = "canvass-shell-v1.8";
+const CACHE_NAME = "canvass-shell-v1.9.1";
 const APP_SHELL = [
   "./",
   "./index.html",

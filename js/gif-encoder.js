@@ -97,7 +97,7 @@
       writeCode(prefix);
       if (nextCode < 4096) {
         dictionary.set(key, nextCode++);
-        if (nextCode === (1 << codeSize) && codeSize < 12) codeSize++;
+        if (nextCode > (1 << codeSize) && codeSize < 12) codeSize++;
       } else {
         writeCode(clearCode);
         reset();

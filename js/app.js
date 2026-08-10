@@ -9,6 +9,23 @@
   const artwork = artworkCanvas.getContext('2d', { alpha: false });
   const hint = document.getElementById('touchHint');
 
+  function makeRandom(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function newSeed() {
+    if (globalThis.crypto?.getRandomValues) {
+      const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] >>> 0;
+    }
+    return (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+  }
+
   const app = {
     state: {
       color: '#e53935',
@@ -27,6 +44,9 @@
     dpr: 1,
     dirty: false,
     lastFrame: performance.now(),
+    randomSeed: 1,
+    random: Math.random,
+    clockNow: () => performance.now() - sessionPerfStart,
 
     paintMark(mark, allowEcho = true) {
       for (const m of B.transformMarks(this, mark)) {
@@ -39,11 +59,14 @@
   };
 
   function beginSession() {
+    app.randomSeed = newSeed();
+    app.random = makeRandom(app.randomSeed);
     app.session = {
       format: 'touch-instrument-session',
-      version: 1,
-      engineVersion: '1.8.0',
+      version: 2,
+      engineVersion: '1.9.1',
       startedAt: new Date().toISOString(),
+      randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
       events: []
     };
@@ -414,7 +437,7 @@
     });
   });
 
-  const gifRecordBtn = document.getElementById('gifRecordBtn');
+  const gifRenderBtn = document.getElementById('gifRenderBtn');
   const gifDialog = document.getElementById('gifDialog');
   const gifPreview = document.getElementById('gifPreview');
   const gifRenderStatus = document.getElementById('gifRenderStatus');
@@ -422,22 +445,10 @@
   const gifMeta = document.getElementById('gifMeta');
   const downloadGifBtn = document.getElementById('downloadGifBtn');
   const GIF_FRAME_DELAY = 125;
-  const GIF_MAX_DURATION = 30000;
   const GIF_MAX_DIMENSION = 480;
-  const gifCapture = {
-    recording: false,
-    rendering: false,
-    startedAt: 0,
-    timer: null,
-    frames: [],
-    width: 0,
-    height: 0,
-    canvas: document.createElement('canvas'),
-    ctx: null,
-    blob: null,
-    url: null
-  };
-  gifCapture.ctx = gifCapture.canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+  const GIF_MAX_FRAMES = 720;
+  const GIF_TAIL_MS = 1600;
+  const gifResult = { rendering: false, blob: null, url: null };
 
   function formatDuration(ms) {
     const seconds = Math.max(0, ms) / 1000;
@@ -450,139 +461,158 @@
   }
 
   function clearGifResult() {
-    gifCapture.blob = null;
-    if (gifCapture.url) URL.revokeObjectURL(gifCapture.url);
-    gifCapture.url = null;
+    gifResult.blob = null;
+    if (gifResult.url) URL.revokeObjectURL(gifResult.url);
+    gifResult.url = null;
     gifPreview.removeAttribute('src');
     gifPreview.hidden = true;
     downloadGifBtn.disabled = true;
   }
 
-  function setupGifCaptureCanvas() {
-    const sourceWidth = Math.max(1, artworkCanvas.width);
-    const sourceHeight = Math.max(1, artworkCanvas.height);
-    const scale = Math.min(1, GIF_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
-    gifCapture.width = Math.max(1, Math.round(sourceWidth * scale));
-    gifCapture.height = Math.max(1, Math.round(sourceHeight * scale));
-    gifCapture.canvas.width = gifCapture.width;
-    gifCapture.canvas.height = gifCapture.height;
+  function cloneState(state) {
+    return {
+      color: state?.color || '#e53935',
+      size: Number(state?.size) || 16,
+      hue: 0,
+      behaviors: { cycle: true, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false, ...(state?.behaviors || {}) }
+    };
   }
 
-  function captureGifFrame(force = false) {
-    if ((!gifCapture.recording && !force) || !window.CanvassGifEncoder) return;
-    if (gifCapture.frames.length >= Math.ceil(GIF_MAX_DURATION / GIF_FRAME_DELAY) + 1) return;
-    const ctx = gifCapture.ctx;
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, gifCapture.width, gifCapture.height);
-    ctx.drawImage(artworkCanvas, 0, 0, artworkCanvas.width, artworkCanvas.height, 0, 0, gifCapture.width, gifCapture.height);
-    ctx.restore();
-    const imageData = ctx.getImageData(0, 0, gifCapture.width, gifCapture.height);
-    gifCapture.frames.push(window.CanvassGifEncoder.quantize(imageData));
-  }
-
-  function updateGifRecordButton() {
-    if (!gifCapture.recording) {
-      gifRecordBtn.textContent = gifCapture.rendering ? 'Rendering…' : 'Record GIF';
-      gifRecordBtn.classList.remove('recording');
-      gifRecordBtn.setAttribute('aria-pressed', 'false');
-      return;
-    }
-    const elapsed = performance.now() - gifCapture.startedAt;
-    gifRecordBtn.textContent = `Stop ${Math.min(30, Math.ceil(elapsed / 1000))}s`;
-    gifRecordBtn.classList.add('recording');
-    gifRecordBtn.setAttribute('aria-pressed', 'true');
-  }
-
-  function startGifRecording() {
-    if (gifCapture.recording || gifCapture.rendering) return;
-    if (!window.CanvassGifEncoder) {
-      alert('GIF rendering is unavailable in this browser.');
-      return;
-    }
-    clearGifResult();
-    gifCapture.frames = [];
-    setupGifCaptureCanvas();
-    gifCapture.startedAt = performance.now();
-    gifCapture.recording = true;
-    captureGifFrame();
-    updateGifRecordButton();
-    gifCapture.timer = setInterval(() => {
-      captureGifFrame();
-      updateGifRecordButton();
-      if (performance.now() - gifCapture.startedAt >= GIF_MAX_DURATION) stopGifRecording('limit');
-    }, GIF_FRAME_DELAY);
-    record('gif-start', { width: gifCapture.width, height: gifCapture.height, fps: Math.round(1000 / GIF_FRAME_DELAY) });
-  }
-
-  async function stopGifRecording(reason = 'user') {
-    if (!gifCapture.recording || gifCapture.rendering) return;
-    gifCapture.recording = false;
-    clearInterval(gifCapture.timer);
-    gifCapture.timer = null;
-    captureGifFrame(true);
-    gifCapture.rendering = true;
-    gifRecordBtn.disabled = true;
-    updateGifRecordButton();
-
-    const elapsed = performance.now() - gifCapture.startedAt;
-    gifRenderStatus.hidden = false;
-    gifRenderStatus.textContent = reason === 'limit' ? '30-second limit reached. Rendering GIF…' : 'Rendering GIF…';
-    gifProgressBar.style.width = '0%';
-    gifMeta.textContent = `${formatDuration(elapsed)} performance • ${gifCapture.frames.length} frames • ${gifCapture.width} × ${gifCapture.height}`;
-    downloadGifBtn.disabled = true;
-    if (!gifDialog.open) gifDialog.showModal();
-
-    record('gif-stop', { reason, durationMs: Math.round(elapsed), frames: gifCapture.frames.length });
-
-    try {
-      const blob = await window.CanvassGifEncoder.encode({
-        width: gifCapture.width,
-        height: gifCapture.height,
-        frames: gifCapture.frames,
-        delayMs: GIF_FRAME_DELAY,
-        repeat: 0,
-        onProgress: progress => {
-          gifProgressBar.style.width = `${Math.round(progress * 100)}%`;
-          gifRenderStatus.textContent = `Rendering GIF… ${Math.round(progress * 100)}%`;
+  function makeReplay(session) {
+    const logicalWidth = Math.max(1, Math.round(session.initialCanvas?.width || app.cssWidth));
+    const logicalHeight = Math.max(1, Math.round(session.initialCanvas?.height || app.cssHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = logicalWidth; canvas.height = logicalHeight;
+    const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+    ctx.lineCap = ctx.lineJoin = 'round';
+    const config = session.events.find(e => e.type === 'config')?.state;
+    const replay = {
+      state: cloneState(config), cssWidth: logicalWidth, cssHeight: logicalHeight,
+      activeTouches: new Map(), particles: [], echoQueue: [], orbitPhase: 0,
+      now: 0, random: makeRandom(session.randomSeed || 1), clockNow: () => replay.now,
+      paintMark(mark, allowEcho = true) {
+        for (const m of B.transformMarks(this, mark)) {
+          drawMark(ctx, m, this);
+          B.addBleedFromMark(this, m);
         }
-      });
-      gifCapture.blob = blob;
-      gifCapture.url = URL.createObjectURL(blob);
-      gifPreview.src = gifCapture.url;
-      gifPreview.hidden = false;
-      gifRenderStatus.hidden = true;
-      gifProgressBar.style.width = '100%';
-      gifMeta.textContent = `${formatDuration(elapsed)} performance • ${gifCapture.frames.length} frames • ${gifCapture.width} × ${gifCapture.height} • ${formatBytes(blob.size)}`;
-      downloadGifBtn.disabled = false;
-      record('gif-ready', { bytes: blob.size });
-    } catch (error) {
-      console.error(error);
-      gifRenderStatus.hidden = false;
-      gifRenderStatus.textContent = 'Could not render this GIF. Try a shorter performance.';
-      gifMeta.textContent = '';
-      gifProgressBar.style.width = '0%';
+        if (allowEcho) B.scheduleEchoes(this, mark);
+      }
+    };
+    return { replay, canvas, ctx };
+  }
+
+  function clearReplay(replay, ctx) {
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, replay.cssWidth, replay.cssHeight); ctx.restore();
+    replay.activeTouches.clear(); replay.particles = []; replay.echoQueue = []; replay.orbitPhase = 0;
+  }
+
+  function processReplayEchoes(replay) {
+    if (!replay.echoQueue.length) return;
+    const remain = [];
+    for (const item of replay.echoQueue) {
+      if (item.at <= replay.now) {
+        const mark = { ...item.mark };
+        if (replay.state.behaviors.cycle) mark.color = null;
+        replay.paintMark(mark, false); B.advanceHue(replay, 7, 0.5);
+      } else remain.push(item);
+    }
+    replay.echoQueue = remain;
+  }
+
+  function applyReplayEvent(replay, ctx, event) {
+    if (event.type === 'config') { replay.state = cloneState(event.state); return; }
+    if (event.type === 'behavior' && event.behavior in replay.state.behaviors) { replay.state.behaviors[event.behavior] = !!event.enabled; return; }
+    if (event.type === 'behavior-all') { Object.keys(replay.state.behaviors).forEach(k => replay.state.behaviors[k] = !!event.enabled); return; }
+    if (event.type === 'color') { replay.state.color = event.color; return; }
+    if (event.type === 'size') { replay.state.size = Number(event.size) || replay.state.size; return; }
+    if (event.type === 'clear') { clearReplay(replay, ctx); return; }
+    if (event.type === 'canvas-size' && event.preserve === false) { clearReplay(replay, ctx); return; }
+    if (!['down','move','up','cancel'].includes(event.type)) return;
+
+    const x = Math.max(0, Math.min(replay.cssWidth, Number(event.x) * replay.cssWidth));
+    const y = Math.max(0, Math.min(replay.cssHeight, Number(event.y) * replay.cssHeight));
+    if (event.type === 'down') {
+      const touch = { id:event.id, x,y,px:x,py:y,time:replay.now,ptime:replay.now,speed:0 };
+      replay.activeTouches.set(event.id, touch);
+      B.advanceHue(replay, 2);
+      replay.paintMark({ type:'dab', x,y, width:replay.state.size, color:replay.state.behaviors.cycle ? null : replay.state.color });
+      return;
+    }
+    const t = replay.activeTouches.get(event.id);
+    if (!t) return;
+    if (event.type === 'up' || event.type === 'cancel') { replay.activeTouches.delete(event.id); return; }
+    t.px=t.x; t.py=t.y; t.ptime=t.time; t.x=x; t.y=y; t.time=replay.now;
+    const distance=Math.hypot(t.x-t.px,t.y-t.py), dt=Math.max(1,t.time-t.ptime); t.speed=distance/dt*1000;
+    if (distance <= 0.15) return;
+    B.advanceHue(replay,distance);
+    replay.paintMark({type:'line',x1:t.px,y1:t.py,x2:t.x,y2:t.y,width:replay.state.size,color:replay.state.behaviors.cycle?null:replay.state.color});
+    if (replay.state.behaviors.connect) {
+      for (const other of replay.activeTouches.values()) {
+        if (other.id===t.id) continue;
+        B.advanceHue(replay,Math.hypot(t.x-other.x,t.y-other.y),0.05);
+        replay.paintMark({type:'line',x1:t.x,y1:t.y,x2:other.x,y2:other.y,width:Math.max(2,replay.state.size*0.58),color:replay.state.behaviors.cycle?null:replay.state.color});
+      }
+    }
+    B.scatterFromSegment(replay,t,distance); B.sprayFromSegment(replay,t,distance); B.bloomFromSegment(replay,t,distance); B.driftFromSegment(replay,t,distance); B.orbitFromSegment(replay,t,distance);
+  }
+
+  async function renderPerformanceGif() {
+    if (gifResult.rendering || !window.CanvassGifEncoder) return;
+    const artistic = app.session?.events?.filter(e => ['down','move','up','cancel','clear','behavior','behavior-all','color','size','canvas-size'].includes(e.type)) || [];
+    const firstDown = artistic.find(e => e.type === 'down');
+    if (!firstDown) { alert('Make some marks before rendering a performance GIF.'); return; }
+
+    clearGifResult(); gifResult.rendering = true; gifRenderBtn.disabled = true;
+    gifRenderBtn.textContent = 'Rendering…'; gifRenderStatus.hidden = false; gifRenderStatus.textContent = 'Replaying performance…';
+    gifProgressBar.style.width = '0%'; gifDialog.showModal();
+
+    const sourceEvents = app.session.events.map(e => ({...e, t:Math.max(0,e.t-firstDown.t)})).filter(e => e.t >= 0);
+    const lastArt = artistic[artistic.length - 1];
+    const naturalDuration = Math.max(250, lastArt.t - firstDown.t + GIF_TAIL_MS);
+    const frameDelay = Math.max(GIF_FRAME_DELAY, Math.ceil(naturalDuration / GIF_MAX_FRAMES / 10) * 10);
+    const duration = naturalDuration;
+    const { replay, canvas, ctx } = makeReplay(app.session);
+    const scale=Math.min(1,GIF_MAX_DIMENSION/Math.max(canvas.width,canvas.height));
+    const outW=Math.max(1,Math.round(canvas.width*scale)), outH=Math.max(1,Math.round(canvas.height*scale));
+    const out=document.createElement('canvas'); out.width=outW; out.height=outH;
+    const outCtx=out.getContext('2d',{alpha:false,willReadFrequently:true});
+    const frames=[]; let eventIndex=0, simTime=0, nextFrame=0; const simStep=1000/60;
+
+    while (simTime <= duration + 0.1) {
+      replay.now = simTime;
+      while (eventIndex < sourceEvents.length && sourceEvents[eventIndex].t <= simTime + 0.01) applyReplayEvent(replay,ctx,sourceEvents[eventIndex++]);
+      processReplayEchoes(replay); B.updateParticles(replay,simStep/1000);
+      if (simTime + 0.01 >= nextFrame) {
+        outCtx.fillStyle='#fff'; outCtx.fillRect(0,0,outW,outH); outCtx.drawImage(canvas,0,0,outW,outH);
+        frames.push(window.CanvassGifEncoder.quantize(outCtx.getImageData(0,0,outW,outH)));
+        nextFrame += frameDelay;
+      }
+      simTime += simStep;
+      if (Math.floor(simTime/simStep)%30===0) {
+        gifProgressBar.style.width=`${Math.min(45,Math.round(simTime/duration*45))}%`;
+        await new Promise(r=>setTimeout(r,0));
+      }
+    }
+
+    gifRenderStatus.textContent='Encoding GIF…';
+    try {
+      const blob=await window.CanvassGifEncoder.encode({width:outW,height:outH,frames,delayMs:frameDelay,repeat:0,onProgress:p=>{gifProgressBar.style.width=`${45+Math.round(p*55)}%`; gifRenderStatus.textContent=`Encoding GIF… ${Math.round(p*100)}%`;}});
+      gifResult.blob=blob; gifResult.url=URL.createObjectURL(blob); gifPreview.src=gifResult.url; gifPreview.hidden=false;
+      gifRenderStatus.hidden=true; gifProgressBar.style.width='100%';
+      gifMeta.textContent=`${formatDuration(duration)} performance • ${frames.length} frames • ${outW} × ${outH} • ${formatBytes(blob.size)}`;
+      downloadGifBtn.disabled=false; record('gif-ready',{bytes:blob.size,source:'performance-replay'});
+    } catch(error) {
+      console.error(error); gifRenderStatus.textContent='Could not render this GIF.'; gifProgressBar.style.width='0%';
     } finally {
-      gifCapture.frames = [];
-      gifCapture.rendering = false;
-      gifRecordBtn.disabled = false;
-      updateGifRecordButton();
+      gifResult.rendering=false; gifRenderBtn.disabled=false; gifRenderBtn.textContent='Render GIF';
     }
   }
 
-  gifRecordBtn.addEventListener('click', () => {
-    if (gifCapture.recording) stopGifRecording('user');
-    else startGifRecording();
-  });
-
-  downloadGifBtn.addEventListener('click', () => {
-    if (!gifCapture.blob) return;
-    downloadBlob(gifCapture.blob, `canvass-performance-${timestampName()}.gif`);
-    record('download-gif', { bytes: gifCapture.blob.size });
-  });
-
-  document.getElementById('closeGifBtn').addEventListener('click', () => gifDialog.close());
+  gifRenderBtn.addEventListener('click', renderPerformanceGif);
+  downloadGifBtn.addEventListener('click',()=>{if(!gifResult.blob)return;downloadBlob(gifResult.blob,`canvass-performance-${timestampName()}.gif`);record('download-gif',{bytes:gifResult.blob.size});});
+  document.getElementById('closeGifBtn').addEventListener('click',()=>gifDialog.close());
 
   function clearCanvas(startNew = false) {
     artwork.save();
@@ -710,7 +740,7 @@
       app.dirty = false;
       hint.classList.remove('hidden');
     }
-    record('canvas-size', { spec: { ...spec }, preserve });
+    record('canvas-size', { spec: { ...spec }, preserve, width: app.cssWidth, height: app.cssHeight });
     saveDrawing();
     canvasDialog.close();
   });
@@ -768,7 +798,7 @@
   window.addEventListener('orientationchange', scheduleResize);
   window.addEventListener('beforeunload', saveDrawing);
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { saveDrawing(); if (gifCapture.recording) stopGifRecording('hidden'); return; }
+    if (document.hidden) { saveDrawing(); return; }
     app.activeTouches.clear();
     app.lastFrame = performance.now();
     requestAnimationFrame(() => requestAnimationFrame(() => resizeCanvases({ preserve: true })));

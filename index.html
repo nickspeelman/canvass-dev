@@ -106,7 +106,7 @@
           <button id="fullscreenBtn" class="utility">Full screen</button>
           <button id="canvasSizeBtn" class="utility">Canvas size</button>
           <button id="saveBtn" class="utility">Save image</button>
-          <button id="gifRecordBtn" class="utility gif-record" aria-pressed="false">Record GIF</button>
+          <button id="gifRenderBtn" class="utility">Render GIF</button>
           <button id="clearBtn" class="utility">Clear</button>
           <button id="finishBtn" class="utility primary">Finish</button>
         </div>
@@ -145,7 +145,7 @@
   <dialog id="gifDialog" class="gif-dialog">
     <div class="gif-card">
       <div class="gif-preview-wrap">
-        <img id="gifPreview" alt="Preview of recorded Canvass performance" hidden />
+        <img id="gifPreview" alt="Preview of rendered Canvass performance" hidden />
         <div id="gifRenderStatus" class="gif-render-status" role="status" aria-live="polite">Preparing GIF…</div>
       </div>
       <div class="gif-progress" aria-hidden="true"><span id="gifProgressBar"></span></div>
