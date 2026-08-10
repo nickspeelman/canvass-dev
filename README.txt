@@ -1,4 +1,4 @@
-CANVAS — v1.9.19
+CANVAS — v1.9.20
 
 Open index.html directly for local development, or serve/deploy the folder over HTTPS for full PWA installation and offline support.
 
@@ -111,3 +111,8 @@ GIF MODAL RETURN — v1.9.19
 --------------------------
 - When Render GIF is launched from Finish, closing the GIF modal now returns to the Finish modal.
 - GIF rendering launched from the normal GIF control retains its prior close behavior.
+
+
+GIF DOWNLOAD — v1.9.20
+----------------------
+- Download GIF now bypasses the mobile native-share helper and directly downloads the rendered .gif.

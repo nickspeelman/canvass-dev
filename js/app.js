@@ -66,7 +66,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 2,
-      engineVersion: '1.9.19',
+      engineVersion: '1.9.20',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -933,10 +933,11 @@
     if (finishDialog?.open) finishDialog.close();
     renderPerformanceGif();
   });
-  downloadGifBtn.addEventListener('click', async () => {
+  downloadGifBtn.addEventListener('click', () => {
     if (!gifResult.blob) return;
-    const saved = await saveBlobForUser(gifResult.blob, `canvas-performance-${timestampName()}.gif`);
-    if (saved) record('download-gif', { bytes: gifResult.blob.size });
+    // "Download GIF" should always perform a browser download, including on mobile.
+    downloadBlob(gifResult.blob, `canvas-performance-${timestampName()}.gif`);
+    record('download-gif', { bytes: gifResult.blob.size, direct: true });
   });
   document.getElementById('closeGifBtn').addEventListener('click', () => {
     gifResult.cancelled = true;
