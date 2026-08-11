@@ -4,15 +4,16 @@
   // Checkpoint 4.5: engine-level safety governor. These limits are deliberately
   // high enough to leave ordinary drawings untouched while preventing
   // multiplicative effect stacks from producing unbounded work.
-  const SAFETY_LIMITS = Object.freeze({
-    maxActiveParticles: 480,
-    maxPipelineWorkItems: 512,
-    maxDeferredPaintCallsPerStep: 480,
-    maxDeferredRenderedMarksPerStep: 2400,
-    maxQueuedEchoes: 480,
-    maxEchoPaintCallsPerStep: 160,
-    maxEchoRenderedMarksPerStep: 2400
-  });
+  const SAFETY_LIMITS = {
+    maxActiveParticles: 800,
+    maxPipelineWorkItems: 1024,
+    maxDeferredPaintCallsPerStep: 800,
+    maxDeferredRenderedMarksPerStep: 4000,
+
+    maxQueuedEchoes: 800,
+    maxEchoPaintCallsPerStep: 240,
+    maxEchoRenderedMarksPerStep: 4000
+  };
 
   function safetyStats(app) {
     if (!app._safetyStats) {
