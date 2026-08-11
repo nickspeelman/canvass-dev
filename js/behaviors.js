@@ -451,7 +451,10 @@
       // ordered registry path. Generated marks remain in the work list, so they
       // continue through every effect that follows their generator.
       for (let effectIndex = options.startAtEffectIndex || 0; effectIndex < stack.length; effectIndex++) {
-        const effectId = stack[effectIndex];
+        const entry = stack[effectIndex];
+        const effectId = typeof entry === 'string' ? entry : entry?.id;
+        const enabled = typeof entry === 'string' ? true : entry?.enabled !== false;
+        if (!enabled) continue;
         const effect = effectRegistry[effectId];
         if (!effect) continue;
 

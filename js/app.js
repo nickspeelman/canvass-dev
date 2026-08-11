@@ -37,9 +37,10 @@
 
   const app = {
     state: {
-      // v2 canonical brush state. Cycle is an ink; paint effects live only in
-      // the ordered effectStack. Legacy Boolean behavior state is generated
-      // only when importing/exporting older sessions.
+      // Canonical Phase 2 brush state. Cycle is an ink; paint effects live only in
+      // the ordered effectStack. Entries retain disabled effects in place so
+      // Phase 2 can expose non-destructive toggling/reordering. Legacy Boolean
+      // behavior state is generated only at compatibility boundaries.
       ink: { type: 'solid', color: '#e53935' },
       effectStack: [],
       size: 16,
@@ -73,8 +74,8 @@
     app.random = makeRandom(app.randomSeed);
     app.session = {
       format: 'touch-instrument-session',
-      version: 3,
-      engineVersion: '2.0.0-cp6',
+      version: 4,
+      engineVersion: '2.4.0-cp2.4',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -86,8 +87,10 @@
   function snapshotState() {
     return {
       ink: { ...app.state.ink },
-      effects: [...app.state.effectStack],
-      effectStack: [...app.state.effectStack],
+      // `effectStack` is canonical in session v4: entries retain both order
+      // and enabled state. `effects` remains an enabled-id compatibility view.
+      effects: enabledEffectIds(app.state.effectStack),
+      effectStack: cloneEffectStack(app.state.effectStack),
       size: app.state.size,
       // Compatibility fields remain in exported sessions so older Canvas
       // builds can still understand the brush state. They are derived here;
@@ -450,6 +453,12 @@
   const effectsBtn = document.getElementById('effectsBtn');
   const effectsMenu = document.getElementById('effectsMenu');
   const effectsCount = document.getElementById('effectsCount');
+  const effectsTabBtn = document.getElementById('effectsTabBtn');
+  const stackTabBtn = document.getElementById('stackTabBtn');
+  const effectsTabPanel = document.getElementById('effectsTabPanel');
+  const stackTabPanel = document.getElementById('stackTabPanel');
+  const effectStackPreview = document.getElementById('effectStackPreview');
+  const cycleInkBtn = document.getElementById('cycleInkBtn');
   const customColorBtn = document.getElementById('customColorBtn');
   const colorMenu = document.getElementById('colorMenu');
   const customColorPicker = document.getElementById('customColorPicker');
@@ -463,11 +472,10 @@
   }
 
   function updateEffectsCount() {
-    // Cycle remains visually in the Effects popover for Checkpoint 1, but it
-    // is an ink internally. Count it so the current UI behaves unchanged.
-    effectsCount.textContent = String(app.state.effectStack.length + (app.state.ink.type === 'cycle' ? 1 : 0));
+    effectsCount.textContent = String(enabledEffectIds(app.state.effectStack).length);
   }
 
+  const BRUSH_STATE_KEY_V3 = 'touch-instrument-brush-state-v3';
   const BRUSH_STATE_KEY_V2 = 'touch-instrument-brush-state-v2';
   const BRUSH_STATE_KEY_V1 = 'touch-instrument-brush-state-v1';
 
@@ -475,76 +483,137 @@
     if (!Array.isArray(value)) return [];
     const seen = new Set();
     const ordered = [];
-    for (const id of value) {
+    for (const item of value) {
+      const id = typeof item === 'string' ? item : item?.id;
       if (!EFFECT_IDS.has(id) || seen.has(id)) continue;
       seen.add(id);
-      ordered.push(id);
+      ordered.push({ id, enabled: typeof item === 'string' ? true : item.enabled !== false });
     }
     return ordered;
   }
 
-  function legacyOrderedEffectStack(value) {
-    const requested = new Set(normalizeEffectStack(value));
-    return LEGACY_EFFECT_ORDER.filter(id => requested.has(id));
+  function cloneEffectStack(stack) {
+    return normalizeEffectStack(stack).map(entry => ({ ...entry }));
+  }
+
+  function enabledEffectIds(stack) {
+    return normalizeEffectStack(stack).filter(entry => entry.enabled).map(entry => entry.id);
+  }
+
+  const EFFECT_LABELS = new Map([
+    ['bloom', 'Bloom'], ['drift', 'Drift'], ['scatter', 'Scatter'], ['spray', 'Spray'],
+    ['bleed', 'Bleed'], ['connect', 'Connect'], ['echo', 'Echo'], ['orbit', 'Orbit'],
+    ['flow', 'Flow'], ['fractal', 'Fractal'], ['mirror', 'Mirror'], ['offset', 'Offset'], ['radial', 'Radial']
+  ]);
+
+  function renderEffectStackPreview() {
+    if (!effectStackPreview) return;
+    const stack = normalizeEffectStack(app.state.effectStack);
+    effectStackPreview.replaceChildren();
+    if (!stack.length) {
+      const empty = document.createElement('p');
+      empty.className = 'stack-preview-empty';
+      empty.textContent = 'No effects have been added yet.';
+      effectStackPreview.appendChild(empty);
+      return;
+    }
+    stack.forEach((entry, index) => {
+      const row = document.createElement('div');
+      row.className = `stack-preview-row${entry.enabled ? '' : ' disabled'}`;
+      row.setAttribute('data-effect-id', entry.id);
+
+      const handle = document.createElement('button');
+      handle.type = 'button';
+      handle.className = 'stack-drag-handle';
+      handle.dataset.dragEffectId = entry.id;
+      handle.setAttribute('aria-label', `Drag ${EFFECT_LABELS.get(entry.id) || entry.id} to reorder`);
+      handle.title = 'Drag to reorder';
+      handle.textContent = '⋮⋮';
+
+      const number = document.createElement('span');
+      number.className = 'stack-preview-index';
+      number.textContent = `${index + 1}.`;
+
+      const label = document.createElement('span');
+      label.className = 'stack-preview-label';
+      label.textContent = EFFECT_LABELS.get(entry.id) || entry.id;
+      if (!entry.enabled) {
+        const state = document.createElement('span');
+        state.className = 'stack-preview-state';
+        state.textContent = 'Off';
+        label.appendChild(state);
+      }
+
+      const controls = document.createElement('div');
+      controls.className = 'stack-preview-controls';
+
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.className = 'stack-control';
+      up.dataset.stackAction = 'up';
+      up.dataset.effectId = entry.id;
+      up.setAttribute('aria-label', `Move ${EFFECT_LABELS.get(entry.id) || entry.id} earlier`);
+      up.title = 'Move earlier';
+      up.textContent = '↑';
+      up.disabled = index === 0;
+
+      const down = document.createElement('button');
+      down.type = 'button';
+      down.className = 'stack-control';
+      down.dataset.stackAction = 'down';
+      down.dataset.effectId = entry.id;
+      down.setAttribute('aria-label', `Move ${EFFECT_LABELS.get(entry.id) || entry.id} later`);
+      down.title = 'Move later';
+      down.textContent = '↓';
+      down.disabled = index === stack.length - 1;
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = `stack-control stack-toggle${entry.enabled ? '' : ' stack-toggle-off'}`;
+      toggle.dataset.stackAction = entry.enabled ? 'disable' : 'enable';
+      toggle.dataset.effectId = entry.id;
+      toggle.setAttribute('aria-label', `${entry.enabled ? 'Disable' : 'Enable'} ${EFFECT_LABELS.get(entry.id) || entry.id}`);
+      toggle.title = entry.enabled ? 'Disable' : 'Enable';
+      toggle.textContent = entry.enabled ? '×' : '+';
+
+      controls.append(up, down, toggle);
+      row.append(handle, number, label, controls);
+      effectStackPreview.appendChild(row);
+    });
   }
 
   function behaviorCompatSnapshot(state) {
-    const enabled = new Set(state.effectStack || []);
+    const enabled = new Set(enabledEffectIds(state.effectStack));
     const compat = makeBehaviorCompat();
     compat.cycle = state.ink?.type === 'cycle';
     for (const id of LEGACY_EFFECT_ORDER) compat[id] = enabled.has(id);
     return compat;
   }
 
+  function effectStackEntry(id, stack = app.state.effectStack) {
+    return Array.isArray(stack) ? stack.find(entry => entry?.id === id) : null;
+  }
+
   function isBehaviorEnabled(id) {
-    return id === 'cycle' ? app.state.ink.type === 'cycle' : app.state.effectStack.includes(id);
+    return effectStackEntry(id)?.enabled === true;
   }
 
-  function setInk(ink, shouldRecord = true, shouldSave = true) {
-    const type = ink?.type === 'cycle' ? 'cycle' : 'solid';
-    const color = parseCssColor(ink?.color || app.state.ink?.color || '#e53935') || '#e53935';
-    app.state.ink = { type, color };
-
-    const cycleBtn = document.querySelector('.behavior[data-behavior="cycle"]');
-    if (cycleBtn) {
-      const active = type === 'cycle';
-      cycleBtn.classList.toggle('active', active);
-      cycleBtn.setAttribute('aria-pressed', String(active));
-    }
-    if (shouldRecord) record('ink', { ink: { ...app.state.ink } });
-    updateEffectsCount();
-    if (shouldSave) saveBrushState();
-  }
-
-  function setEffectStack(nextStack, shouldRecord = true, shouldSave = true, metadata = {}) {
-    app.state.effectStack = normalizeEffectStack(nextStack);
-    const enabled = new Set(app.state.effectStack);
-    document.querySelectorAll('.behavior[data-behavior]').forEach(btn => {
-      const id = btn.dataset.behavior;
-      if (id === 'cycle') return;
-      const active = enabled.has(id);
-      btn.classList.toggle('active', active);
-      btn.setAttribute('aria-pressed', String(active));
+  function syncInkUi() {
+    document.querySelectorAll('.swatch').forEach(btn => {
+      btn.classList.remove('active');
+      btn.setAttribute('aria-pressed', 'false');
     });
-    if (shouldRecord) record('effect-stack', { effects: [...app.state.effectStack], ...metadata });
-    updateEffectsCount();
-    if (shouldSave) saveBrushState();
-  }
 
-  function saveBrushState() {
-    try {
-      localStorage.setItem(BRUSH_STATE_KEY_V2, JSON.stringify({
-        version: 2,
-        ink: { ...app.state.ink },
-        size: app.state.size,
-        effects: [...app.state.effectStack]
-      }));
-    } catch (_) {}
-  }
+    if (app.state.ink.type === 'cycle') {
+      cycleInkBtn?.classList.add('active');
+      cycleInkBtn?.setAttribute('aria-pressed', 'true');
+      return;
+    }
 
-  function applyRestoredColorUi(color) {
-    document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
-    const preset = [...document.querySelectorAll('.swatch[data-color]')].find(b => (parseCssColor(b.dataset.color) || b.dataset.color) === color);
+    const color = app.state.ink.color;
+    const preset = [...document.querySelectorAll('.swatch[data-color]')].find(btn =>
+      (parseCssColor(btn.dataset.color) || btn.dataset.color) === color
+    );
     if (preset) {
       preset.classList.add('active');
       preset.setAttribute('aria-pressed', 'true');
@@ -555,30 +624,91 @@
     }
   }
 
+  function setInk(ink, shouldRecord = true, shouldSave = true) {
+    const type = ink?.type === 'cycle' ? 'cycle' : 'solid';
+    const color = parseCssColor(ink?.color || app.state.ink?.color || '#e53935') || '#e53935';
+    app.state.ink = { type, color };
+    syncInkUi();
+    if (shouldRecord) record('ink', { ink: { ...app.state.ink } });
+    if (shouldSave) saveBrushState();
+  }
+
+  function setEffectStack(nextStack, shouldRecord = true, shouldSave = true, metadata = {}) {
+    app.state.effectStack = normalizeEffectStack(nextStack);
+    const enabled = new Set(enabledEffectIds(app.state.effectStack));
+    document.querySelectorAll('.behavior[data-behavior]').forEach(btn => {
+      const id = btn.dataset.behavior;
+      const active = enabled.has(id);
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+    renderEffectStackPreview();
+    if (shouldRecord) record('effect-stack', {
+      effectStack: cloneEffectStack(app.state.effectStack),
+      effects: enabledEffectIds(app.state.effectStack),
+      ...metadata
+    });
+    updateEffectsCount();
+    if (shouldSave) saveBrushState();
+  }
+
+  function saveBrushState() {
+    try {
+      localStorage.setItem(BRUSH_STATE_KEY_V3, JSON.stringify({
+        version: 3,
+        ink: { ...app.state.ink },
+        size: app.state.size,
+        effectStack: cloneEffectStack(app.state.effectStack),
+        // Compatibility view for older builds/tools that only understand
+        // the enabled effect-id list.
+        effects: enabledEffectIds(app.state.effectStack)
+      }));
+    } catch (_) {}
+  }
+
+  function applyRestoredColorUi(color) {
+    // `color` is retained for migration callers; the active ink type decides
+    // whether the Cycle swatch or a solid/custom color is selected.
+    if (app.state.ink.type === 'solid' && color) app.state.ink.color = color;
+    syncInkUi();
+  }
+
   function restoreBrushState() {
+    let savedV3 = null;
     let savedV2 = null;
     let savedV1 = null;
-    try { savedV2 = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY_V2) || 'null'); } catch (_) {}
-    if (!savedV2 || typeof savedV2 !== 'object') {
+    try { savedV3 = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY_V3) || 'null'); } catch (_) {}
+    if (!savedV3 || typeof savedV3 !== 'object') {
+      try { savedV2 = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY_V2) || 'null'); } catch (_) {}
+    }
+    if ((!savedV3 || typeof savedV3 !== 'object') && (!savedV2 || typeof savedV2 !== 'object')) {
       try { savedV1 = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY_V1) || 'null'); } catch (_) {}
     }
 
     let restored = null;
     let migrated = false;
-    if (savedV2 && typeof savedV2 === 'object') {
+    if (savedV3 && typeof savedV3 === 'object') {
+      const color = parseCssColor(savedV3.ink?.color || savedV3.color || '#e53935') || '#e53935';
+      restored = {
+        ink: { type: savedV3.ink?.type === 'cycle' ? 'cycle' : 'solid', color },
+        size: Number(savedV3.size) || 16,
+        effectStack: normalizeEffectStack(savedV3.effectStack || savedV3.effects)
+      };
+    } else if (savedV2 && typeof savedV2 === 'object') {
       const color = parseCssColor(savedV2.ink?.color || savedV2.color || '#e53935') || '#e53935';
       restored = {
         ink: { type: savedV2.ink?.type === 'cycle' ? 'cycle' : 'solid', color },
         size: Number(savedV2.size) || 16,
-        effects: normalizeEffectStack(savedV2.effects || savedV2.effectStack)
+        effectStack: normalizeEffectStack(savedV2.effectStack || savedV2.effects)
       };
+      migrated = true;
     } else if (savedV1 && typeof savedV1 === 'object') {
       const color = parseCssColor(savedV1.color || '#e53935') || '#e53935';
       const behaviors = savedV1.behaviors && typeof savedV1.behaviors === 'object' ? savedV1.behaviors : {};
       restored = {
         ink: { type: behaviors.cycle ? 'cycle' : 'solid', color },
         size: Number(savedV1.size) || 16,
-        effects: LEGACY_EFFECT_ORDER.filter(id => behaviors[id] === true)
+        effectStack: LEGACY_EFFECT_ORDER.filter(id => behaviors[id] === true).map(id => ({ id, enabled: true }))
       };
       migrated = true;
     }
@@ -596,22 +726,147 @@
       });
     }
 
-    setEffectStack(restored.effects, false, false);
+    setEffectStack(restored.effectStack, false, false);
     if (migrated) saveBrushState();
   }
 
   function setBehavior(key, enabled, shouldRecord = true, shouldSave = true) {
-    if (key === 'cycle') {
-      setInk({ type: enabled ? 'cycle' : 'solid', color: app.state.ink.color }, shouldRecord, shouldSave);
+    if (!EFFECT_IDS.has(key)) return;
+
+    const next = cloneEffectStack(app.state.effectStack);
+    const existing = next.find(entry => entry.id === key);
+    if (existing) {
+      existing.enabled = Boolean(enabled);
+    } else if (enabled) {
+      // Phase 2 semantics: a genuinely new effect joins at the end. Turning an
+      // existing effect off never loses its place; turning it back on restores
+      // that same position.
+      next.push({ id: key, enabled: true });
+    } else {
       return;
     }
-    if (!EFFECT_IDS.has(key)) return;
-    const next = new Set(app.state.effectStack);
-    if (enabled) next.add(key); else next.delete(key);
-    // Until the ordering UI arrives, ordinary toggles retain the predetermined
-    // legacy execution order. Explicit stacks can still preserve arbitrary order.
-    setEffectStack(legacyOrderedEffectStack([...next]), shouldRecord, shouldSave, { changedEffect: key, enabled });
+    setEffectStack(next, shouldRecord, shouldSave, { changedEffect: key, enabled: Boolean(enabled) });
   }
+
+  function moveEffectInStack(id, direction) {
+    const next = cloneEffectStack(app.state.effectStack);
+    const index = next.findIndex(entry => entry.id === id);
+    if (index < 0) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= next.length) return;
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    setEffectStack(next, true, true, { changedEffect: id, stackAction: direction < 0 ? 'up' : 'down' });
+  }
+
+  function toggleEffectEnabledFromStack(id, enabled) {
+    const next = cloneEffectStack(app.state.effectStack);
+    const existing = next.find(entry => entry.id === id);
+    if (!existing) return;
+    if (existing.enabled === Boolean(enabled)) return;
+    existing.enabled = Boolean(enabled);
+    setEffectStack(next, true, true, { changedEffect: id, stackAction: enabled ? 'enable' : 'disable', enabled: Boolean(enabled) });
+  }
+
+  let stackDrag = null;
+
+  function stackRows() {
+    return [...effectStackPreview.querySelectorAll('.stack-preview-row[data-effect-id]')];
+  }
+
+  function updateStackRowNumbers() {
+    stackRows().forEach((row, index) => {
+      const number = row.querySelector('.stack-preview-index');
+      if (number) number.textContent = `${index + 1}.`;
+    });
+  }
+
+  function reorderDraggedStackRow(clientY) {
+    if (!stackDrag?.row) return;
+    const row = stackDrag.row;
+    const siblings = stackRows().filter(candidate => candidate !== row);
+    let before = null;
+    for (const candidate of siblings) {
+      const rect = candidate.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        before = candidate;
+        break;
+      }
+    }
+    if (before) effectStackPreview.insertBefore(row, before);
+    else effectStackPreview.appendChild(row);
+    updateStackRowNumbers();
+  }
+
+  function nudgeStackScrollDuringDrag(clientY) {
+    const rect = effectStackPreview.getBoundingClientRect();
+    const edge = 34;
+    const step = 12;
+    if (clientY < rect.top + edge) effectStackPreview.scrollTop -= step;
+    else if (clientY > rect.bottom - edge) effectStackPreview.scrollTop += step;
+  }
+
+  function finishStackDrag(commit = true) {
+    if (!stackDrag) return;
+    const { row, handle, pointerId, effectId, startOrder } = stackDrag;
+    try {
+      if (handle?.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId);
+    } catch (_) {}
+    row?.classList.remove('dragging');
+    stackDrag = null;
+
+    if (!commit) {
+      renderEffectStackPreview();
+      return;
+    }
+
+    const order = stackRows().map(item => item.dataset.effectId);
+    const changed = order.length === startOrder.length && order.some((id, index) => id !== startOrder[index]);
+    if (!changed) {
+      updateStackRowNumbers();
+      return;
+    }
+
+    const byId = new Map(cloneEffectStack(app.state.effectStack).map(entry => [entry.id, entry]));
+    const next = order.map(id => byId.get(id)).filter(Boolean);
+    setEffectStack(next, true, true, { changedEffect: effectId, stackAction: 'drag' });
+  }
+
+  effectStackPreview?.addEventListener('pointerdown', event => {
+    const handle = event.target.closest('.stack-drag-handle[data-drag-effect-id]');
+    if (!handle || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    const row = handle.closest('.stack-preview-row[data-effect-id]');
+    if (!row) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerId = event.pointerId;
+    try { handle.setPointerCapture(pointerId); } catch (_) {}
+    stackDrag = {
+      pointerId,
+      handle,
+      row,
+      effectId: row.dataset.effectId,
+      startOrder: stackRows().map(item => item.dataset.effectId)
+    };
+    row.classList.add('dragging');
+  });
+
+  effectStackPreview?.addEventListener('pointermove', event => {
+    if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
+    event.preventDefault();
+    reorderDraggedStackRow(event.clientY);
+    nudgeStackScrollDuringDrag(event.clientY);
+  });
+
+  effectStackPreview?.addEventListener('pointerup', event => {
+    if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
+    event.preventDefault();
+    finishStackDrag(true);
+  });
+
+  effectStackPreview?.addEventListener('pointercancel', event => {
+    if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
+    finishStackDrag(false);
+  });
 
   function getControlsHeight() {
     const controls = document.querySelector('.controls');
@@ -662,11 +917,37 @@
     }
   }
 
+  function showEffectsMenuTab(tab) {
+    const showStack = tab === 'stack';
+    effectsTabBtn.classList.toggle('active', !showStack);
+    stackTabBtn.classList.toggle('active', showStack);
+    effectsTabBtn.setAttribute('aria-selected', String(!showStack));
+    stackTabBtn.setAttribute('aria-selected', String(showStack));
+    effectsTabPanel.hidden = showStack;
+    stackTabPanel.hidden = !showStack;
+    if (showStack) renderEffectStackPreview();
+  }
+
+  effectsTabBtn.addEventListener('click', () => showEffectsMenuTab('effects'));
+  stackTabBtn.addEventListener('click', () => showEffectsMenuTab('stack'));
+  effectStackPreview?.addEventListener('click', event => {
+    const button = event.target.closest('button[data-stack-action][data-effect-id]');
+    if (!button) return;
+    const id = button.dataset.effectId;
+    if (button.dataset.stackAction === 'up') moveEffectInStack(id, -1);
+    else if (button.dataset.stackAction === 'down') moveEffectInStack(id, 1);
+    else if (button.dataset.stackAction === 'disable') toggleEffectEnabledFromStack(id, false);
+    else if (button.dataset.stackAction === 'enable') toggleEffectEnabledFromStack(id, true);
+  });
+
   effectsBtn.addEventListener('click', e => {
     e.stopPropagation();
     const willOpen = effectsMenu.hidden;
     closePopovers(willOpen ? effectsMenu : null);
-    if (willOpen) positionEffectsMenu();
+    if (willOpen) {
+      showEffectsMenuTab('effects');
+      positionEffectsMenu();
+    }
     effectsMenu.hidden = !willOpen;
     effectsBtn.setAttribute('aria-expanded', String(willOpen));
   });
@@ -686,29 +967,34 @@
   });
 
   document.getElementById('selectAllEffectsBtn').addEventListener('click', () => {
-    setEffectStack(LEGACY_EFFECT_ORDER, false, false);
-    setInk({ type: 'cycle', color: app.state.ink.color }, false, false);
-    record('effect-stack', { effects: [...app.state.effectStack], enabled: true });
-    record('ink', { ink: { ...app.state.ink } });
+    const next = cloneEffectStack(app.state.effectStack);
+    const present = new Set(next.map(entry => entry.id));
+    for (const entry of next) entry.enabled = true;
+    for (const id of LEGACY_EFFECT_ORDER) if (!present.has(id)) next.push({ id, enabled: true });
+    setEffectStack(next, false, false);
+    record('effect-stack', { effectStack: cloneEffectStack(app.state.effectStack), effects: enabledEffectIds(app.state.effectStack), enabled: true });
     saveBrushState();
   });
 
   document.getElementById('clearAllEffectsBtn').addEventListener('click', () => {
-    setEffectStack([], false, false);
-    setInk({ type: 'solid', color: app.state.ink.color }, false, false);
-    record('effect-stack', { effects: [], enabled: false });
-    record('ink', { ink: { ...app.state.ink } });
+    const next = cloneEffectStack(app.state.effectStack).map(entry => ({ ...entry, enabled: false }));
+    setEffectStack(next, false, false);
+    record('effect-stack', { effectStack: cloneEffectStack(app.state.effectStack), effects: [], enabled: false });
     saveBrushState();
   });
 
   function activateColorButton(btn, color) {
-    document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
-    btn.classList.add('active');
-    btn.setAttribute('aria-pressed', 'true');
-    app.state.ink = { ...app.state.ink, color };
-    record('color', { color });
+    const parsed = parseCssColor(color) || color;
+    app.state.ink = { type: 'solid', color: parsed };
+    syncInkUi();
+    record('ink', { ink: { ...app.state.ink } });
     saveBrushState();
   }
+
+  cycleInkBtn.addEventListener('click', () => {
+    closePopovers();
+    setInk({ type: 'cycle', color: app.state.ink.color });
+  });
 
   document.querySelectorAll('.swatch[data-color]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -917,18 +1203,30 @@
     const legacyBehaviors = state?.behaviors && typeof state.behaviors === 'object' ? state.behaviors : {};
     const color = parseCssColor(state?.ink?.color || state?.color || '#e53935') || '#e53935';
     const inkType = state?.ink?.type === 'cycle' || (!state?.ink && legacyBehaviors.cycle) ? 'cycle' : 'solid';
-    const effects = normalizeEffectStack(state?.effects || state?.effectStack || LEGACY_EFFECT_ORDER.filter(id => legacyBehaviors[id]));
+
+    let sourceStack = null;
+    if (Array.isArray(state?.effectStack)) sourceStack = state.effectStack;
+    else if (Array.isArray(state?.effects)) sourceStack = state.effects;
+    else sourceStack = LEGACY_EFFECT_ORDER.filter(id => legacyBehaviors[id]).map(id => ({ id, enabled: true }));
+
+    const effectStack = normalizeEffectStack(sourceStack);
     const behaviors = makeBehaviorCompat();
     behaviors.cycle = inkType === 'cycle';
-    for (const id of effects) behaviors[id] = true;
+    for (const id of enabledEffectIds(effectStack)) behaviors[id] = true;
     return {
       ink: { type: inkType, color },
-      effectStack: [...effects],
+      effectStack: cloneEffectStack(effectStack),
       color,
       size: Number(state?.size) || 16,
       hue: Number(state?.hue) || 0,
       behaviors
     };
+  }
+
+  function stackFromEffectEvent(event, fallbackStack = []) {
+    if (Array.isArray(event?.effectStack)) return normalizeEffectStack(event.effectStack);
+    if (Array.isArray(event?.effects)) return normalizeEffectStack(event.effects);
+    return cloneEffectStack(fallbackStack);
   }
 
   function makeReplay(session, initialState = null, randomSeed = null) {
@@ -963,19 +1261,21 @@
 
   function applyReplayEvent(replay, ctx, event) {
     if (event.type === 'config') { replay.state = cloneState(event.state); return; }
-    if (event.type === 'effect-stack') { replay.state = cloneState({ ...replay.state, effects: event.effects }); return; }
+    if (event.type === 'effect-stack') { replay.state = cloneState({ ...replay.state, effectStack: stackFromEffectEvent(event, replay.state.effectStack) }); return; }
     if (event.type === 'ink') { replay.state = cloneState({ ...replay.state, ink: event.ink }); return; }
     if (event.type === 'behavior' && event.behavior in replay.state.behaviors) {
       if (event.behavior === 'cycle') replay.state = cloneState({ ...replay.state, ink: { type: event.enabled ? 'cycle' : 'solid', color: replay.state.color } });
       else {
-        const next = new Set(replay.state.effectStack);
-        if (event.enabled) next.add(event.behavior); else next.delete(event.behavior);
-        replay.state = cloneState({ ...replay.state, effects: [...next] });
+        const enabled = new Set(enabledEffectIds(replay.state.effectStack));
+        if (event.enabled) enabled.add(event.behavior); else enabled.delete(event.behavior);
+        const legacyStack = LEGACY_EFFECT_ORDER.filter(id => enabled.has(id)).map(id => ({ id, enabled: true }));
+        replay.state = cloneState({ ...replay.state, effectStack: legacyStack });
       }
       return;
     }
     if (event.type === 'behavior-all') {
-      replay.state = cloneState({ ...replay.state, effects: event.enabled ? LEGACY_EFFECT_ORDER : [], ink: { type: event.enabled ? 'cycle' : 'solid', color: replay.state.color } });
+      const legacyStack = LEGACY_EFFECT_ORDER.map(id => ({ id, enabled: Boolean(event.enabled) }));
+      replay.state = cloneState({ ...replay.state, effectStack: legacyStack, ink: { type: event.enabled ? 'cycle' : 'solid', color: replay.state.color } });
       return;
     }
     if (event.type === 'color') { replay.state.color = event.color; replay.state.ink = { ...replay.state.ink, color: event.color }; return; }
@@ -1018,18 +1318,20 @@
         const next = cloneState(event.state);
         Object.assign(state, next);
       } else if (event.type === 'effect-stack') {
-        Object.assign(state, cloneState({ ...state, effects: event.effects }));
+        Object.assign(state, cloneState({ ...state, effectStack: stackFromEffectEvent(event, state.effectStack) }));
       } else if (event.type === 'ink') {
         Object.assign(state, cloneState({ ...state, ink: event.ink }));
       } else if (event.type === 'behavior' && event.behavior in state.behaviors) {
         if (event.behavior === 'cycle') Object.assign(state, cloneState({ ...state, ink: { type: event.enabled ? 'cycle' : 'solid', color: state.color } }));
         else {
-          const nextEffects = new Set(state.effectStack);
-          if (event.enabled) nextEffects.add(event.behavior); else nextEffects.delete(event.behavior);
-          Object.assign(state, cloneState({ ...state, effects: [...nextEffects] }));
+          const enabled = new Set(enabledEffectIds(state.effectStack));
+          if (event.enabled) enabled.add(event.behavior); else enabled.delete(event.behavior);
+          const legacyStack = LEGACY_EFFECT_ORDER.filter(id => enabled.has(id)).map(id => ({ id, enabled: true }));
+          Object.assign(state, cloneState({ ...state, effectStack: legacyStack }));
         }
       } else if (event.type === 'behavior-all') {
-        Object.assign(state, cloneState({ ...state, effects: event.enabled ? LEGACY_EFFECT_ORDER : [], ink: { type: event.enabled ? 'cycle' : 'solid', color: state.color } }));
+        const legacyStack = LEGACY_EFFECT_ORDER.map(id => ({ id, enabled: Boolean(event.enabled) }));
+        Object.assign(state, cloneState({ ...state, effectStack: legacyStack, ink: { type: event.enabled ? 'cycle' : 'solid', color: state.color } }));
       } else if (event.type === 'color') {
         state.color = event.color; state.ink = { ...state.ink, color: event.color };
       } else if (event.type === 'size') {
