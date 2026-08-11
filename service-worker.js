@@ -1,5 +1,15 @@
-const CACHE_NAME = "canvas-shell-v1.9.35";
-const APP_VERSION = CACHE_NAME.replace("canvas-shell-v", "");
+const BASE_VERSION = "1.9.35";
+
+// The same service worker is deployed to both production and development.
+// Give dev its own visible version label/cache name automatically so releases
+// can be promoted without manually adding or removing a "-dev" suffix.
+const IS_DEV =
+  self.location.hostname === "dev.canvas.nickspeelman.com" ||
+  (self.location.hostname === "nickspeelman.github.io" &&
+   self.location.pathname.startsWith("/canvass-dev/"));
+
+const APP_VERSION = IS_DEV ? `${BASE_VERSION}-dev` : BASE_VERSION;
+const CACHE_NAME = `canvas-shell-v${APP_VERSION}`;
 
 const APP_SHELL = [
   "./",

@@ -28,12 +28,23 @@
     return (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
   }
 
+  const LEGACY_EFFECT_ORDER = [...B.legacyEffectOrder];
+  const EFFECT_IDS = new Set(LEGACY_EFFECT_ORDER);
+
+  function makeBehaviorCompat() {
+    return { cycle: false, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false };
+  }
+
   const app = {
     state: {
+      // v2 canonical brush state. `color` and `behaviors` remain as temporary
+      // compatibility mirrors until the rendering engine moves to the pipeline.
+      ink: { type: 'solid', color: '#e53935' },
+      effectStack: [],
       color: '#e53935',
       size: 16,
       hue: 0,
-      behaviors: { cycle: false, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false }
+      behaviors: makeBehaviorCompat()
     },
     canvasSpec: { mode: 'responsive', width: null, height: null },
     activeTouches: new Map(),
@@ -50,13 +61,11 @@
     random: Math.random,
     clockNow: () => performance.now() - sessionPerfStart,
 
-    paintMark(mark, allowEcho = true) {
-      for (const m of B.transformMarks(this, mark)) {
-        drawMark(artwork, m, this);
-        B.addBleedFromMark(this, m);
-      }
-      if (allowEcho) B.scheduleEchoes(this, mark);
+    paintMark(mark, allowEcho = true, pipelineContext = null, startAtEffectIndex = 0) {
+      const workItems = B.processEffectStack(this, mark, { allowEcho, pipelineContext, startAtEffectIndex });
+      for (const work of workItems) drawMark(artwork, work.mark, this);
       this.dirty = true;
+      return workItems.length;
     }
   };
 
@@ -65,8 +74,8 @@
     app.random = makeRandom(app.randomSeed);
     app.session = {
       format: 'touch-instrument-session',
-      version: 2,
-      engineVersion: '1.9.20',
+      version: 3,
+      engineVersion: '2.0.0-cp5',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -77,8 +86,13 @@
 
   function snapshotState() {
     return {
-      color: app.state.color,
+      ink: { ...app.state.ink },
+      effects: [...app.state.effectStack],
+      effectStack: [...app.state.effectStack],
       size: app.state.size,
+      // Compatibility fields keep existing replay/render code and exported
+      // sessions readable while v2 moves fully onto ink + effectStack.
+      color: app.state.color,
       behaviors: { ...app.state.behaviors },
       canvas: { ...app.canvasSpec }
     };
@@ -110,6 +124,14 @@
           analyticsEvent('drawing_started');
         }
         break;
+      case 'effect-stack':
+        if (data.changedEffect) analyticsEvent('effect_toggled', { effect_name: data.changedEffect, enabled: data.enabled });
+        else analyticsEvent('effects_bulk_changed', { enabled: data.enabled });
+        break;
+      case 'ink':
+        analyticsEvent('ink_changed', { ink_type: data.ink?.type || 'solid' });
+        break;
+      // Legacy event names remain understood for older imported/replayed data.
       case 'behavior':
         analyticsEvent('effect_toggled', { effect_name: data.behavior, enabled: data.enabled });
         break;
@@ -379,26 +401,7 @@
         type: 'line', x1: t.px, y1: t.py, x2: t.x, y2: t.y,
         width: app.state.size, color: app.state.behaviors.cycle ? null : app.state.color
       };
-      app.paintMark(mark);
-
-      if (app.state.behaviors.connect) {
-        for (const other of app.activeTouches.values()) {
-          if (other.id === t.id) continue;
-          const connector = {
-            type: 'line', x1: t.x, y1: t.y, x2: other.x, y2: other.y,
-            width: Math.max(2, app.state.size * 0.58),
-            color: app.state.behaviors.cycle ? null : app.state.color
-          };
-          B.advanceHue(app, Math.hypot(t.x - other.x, t.y - other.y), 0.05);
-          app.paintMark(connector);
-        }
-      }
-
-      B.scatterFromSegment(app, t, distance);
-      B.sprayFromSegment(app, t, distance);
-      B.bloomFromSegment(app, t, distance);
-      B.driftFromSegment(app, t, distance);
-      B.orbitFromSegment(app, t, distance);
+      app.paintMark(mark, true, { allowImmediateGenerators: true, allowDeferredGenerators: true, touchId: t.id, gesturePhase: 'move', speed: t.speed });
       record('move', { id: e.pointerId, ...normalizedPoint(t.x, t.y) });
       saveSoon();
     }
@@ -432,19 +435,7 @@
     }
   }
 
-  function processEchoes(now) {
-    if (!app.echoQueue.length) return;
-    const remain = [];
-    for (const item of app.echoQueue) {
-      if (item.at <= now) {
-        const mark = { ...item.mark };
-        if (app.state.behaviors.cycle) mark.color = null;
-        app.paintMark(mark, false);
-        B.advanceHue(app, 7, 0.5);
-      } else remain.push(item);
-    }
-    app.echoQueue = remain;
-  }
+  function processEchoes(now) { B.processEchoQueue(app, now); }
 
   function frame(now) {
     const dt = Math.min(0.05, (now - app.lastFrame) / 1000);
@@ -472,69 +463,153 @@
   }
 
   function updateEffectsCount() {
-    effectsCount.textContent = String(Object.values(app.state.behaviors).filter(Boolean).length);
+    // Cycle remains visually in the Effects popover for Checkpoint 1, but it
+    // is an ink internally. Count it so the current UI behaves unchanged.
+    effectsCount.textContent = String(app.state.effectStack.length + (app.state.ink.type === 'cycle' ? 1 : 0));
   }
 
-  const BRUSH_STATE_KEY = 'touch-instrument-brush-state-v1';
+  const BRUSH_STATE_KEY_V2 = 'touch-instrument-brush-state-v2';
+  const BRUSH_STATE_KEY_V1 = 'touch-instrument-brush-state-v1';
+
+  function normalizeEffectStack(value) {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    const ordered = [];
+    for (const id of value) {
+      if (!EFFECT_IDS.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+    }
+    return ordered;
+  }
+
+  function legacyOrderedEffectStack(value) {
+    const requested = new Set(normalizeEffectStack(value));
+    return LEGACY_EFFECT_ORDER.filter(id => requested.has(id));
+  }
+
+  function syncBehaviorCompat() {
+    const enabled = new Set(app.state.effectStack);
+    const compat = makeBehaviorCompat();
+    compat.cycle = app.state.ink.type === 'cycle';
+    for (const id of LEGACY_EFFECT_ORDER) compat[id] = enabled.has(id);
+    app.state.behaviors = compat;
+    app.state.color = app.state.ink.color || app.state.color || '#e53935';
+  }
+
+  function setInk(ink, shouldRecord = true, shouldSave = true) {
+    const type = ink?.type === 'cycle' ? 'cycle' : 'solid';
+    const color = parseCssColor(ink?.color || app.state.ink?.color || app.state.color || '#e53935') || '#e53935';
+    app.state.ink = { type, color };
+    syncBehaviorCompat();
+
+    const cycleBtn = document.querySelector('.behavior[data-behavior="cycle"]');
+    if (cycleBtn) {
+      const active = type === 'cycle';
+      cycleBtn.classList.toggle('active', active);
+      cycleBtn.setAttribute('aria-pressed', String(active));
+    }
+    if (shouldRecord) record('ink', { ink: { ...app.state.ink } });
+    updateEffectsCount();
+    if (shouldSave) saveBrushState();
+  }
+
+  function setEffectStack(nextStack, shouldRecord = true, shouldSave = true, metadata = {}) {
+    app.state.effectStack = normalizeEffectStack(nextStack);
+    syncBehaviorCompat();
+    const enabled = new Set(app.state.effectStack);
+    document.querySelectorAll('.behavior[data-behavior]').forEach(btn => {
+      const id = btn.dataset.behavior;
+      if (id === 'cycle') return;
+      const active = enabled.has(id);
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+    if (shouldRecord) record('effect-stack', { effects: [...app.state.effectStack], ...metadata });
+    updateEffectsCount();
+    if (shouldSave) saveBrushState();
+  }
 
   function saveBrushState() {
     try {
-      localStorage.setItem(BRUSH_STATE_KEY, JSON.stringify({
-        color: app.state.color,
+      localStorage.setItem(BRUSH_STATE_KEY_V2, JSON.stringify({
+        version: 2,
+        ink: { ...app.state.ink },
         size: app.state.size,
-        behaviors: { ...app.state.behaviors }
+        effects: [...app.state.effectStack]
       }));
     } catch (_) {}
   }
 
-  function restoreBrushState() {
-    let saved;
-    try { saved = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY) || 'null'); } catch (_) { return; }
-    if (!saved || typeof saved !== 'object') return;
+  function applyRestoredColorUi(color) {
+    document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
+    const preset = [...document.querySelectorAll('.swatch[data-color]')].find(b => (parseCssColor(b.dataset.color) || b.dataset.color) === color);
+    if (preset) {
+      preset.classList.add('active');
+      preset.setAttribute('aria-pressed', 'true');
+    } else {
+      customColorBtn.classList.add('active');
+      customColorBtn.setAttribute('aria-pressed', 'true');
+      setCustomColor(color, false);
+    }
+  }
 
-    if (typeof saved.color === 'string' && parseCssColor(saved.color)) {
-      const color = parseCssColor(saved.color);
-      app.state.color = color;
-      document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
-      const preset = [...document.querySelectorAll('.swatch[data-color]')].find(b => (parseCssColor(b.dataset.color) || b.dataset.color) === color);
-      if (preset) {
-        preset.classList.add('active');
-        preset.setAttribute('aria-pressed', 'true');
-      } else {
-        customColorBtn.classList.add('active');
-        customColorBtn.setAttribute('aria-pressed', 'true');
-        setCustomColor(color, false);
-      }
+  function restoreBrushState() {
+    let savedV2 = null;
+    let savedV1 = null;
+    try { savedV2 = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY_V2) || 'null'); } catch (_) {}
+    if (!savedV2 || typeof savedV2 !== 'object') {
+      try { savedV1 = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY_V1) || 'null'); } catch (_) {}
     }
 
-    const size = Number(saved.size);
-    if (Number.isFinite(size) && document.querySelector(`.size[data-size="${size}"]`)) {
-      app.state.size = size;
+    let restored = null;
+    let migrated = false;
+    if (savedV2 && typeof savedV2 === 'object') {
+      const color = parseCssColor(savedV2.ink?.color || savedV2.color || '#e53935') || '#e53935';
+      restored = {
+        ink: { type: savedV2.ink?.type === 'cycle' ? 'cycle' : 'solid', color },
+        size: Number(savedV2.size) || 16,
+        effects: normalizeEffectStack(savedV2.effects || savedV2.effectStack)
+      };
+    } else if (savedV1 && typeof savedV1 === 'object') {
+      const color = parseCssColor(savedV1.color || '#e53935') || '#e53935';
+      const behaviors = savedV1.behaviors && typeof savedV1.behaviors === 'object' ? savedV1.behaviors : {};
+      restored = {
+        ink: { type: behaviors.cycle ? 'cycle' : 'solid', color },
+        size: Number(savedV1.size) || 16,
+        effects: LEGACY_EFFECT_ORDER.filter(id => behaviors[id] === true)
+      };
+      migrated = true;
+    }
+    if (!restored) return;
+
+    setInk(restored.ink, false, false);
+    applyRestoredColorUi(restored.ink.color);
+
+    if (Number.isFinite(restored.size) && document.querySelector(`.size[data-size="${restored.size}"]`)) {
+      app.state.size = restored.size;
       document.querySelectorAll('.size').forEach(b => {
-        const active = Number(b.dataset.size) === size;
+        const active = Number(b.dataset.size) === restored.size;
         b.classList.toggle('active', active);
         b.setAttribute('aria-pressed', String(active));
       });
     }
 
-    if (saved.behaviors && typeof saved.behaviors === 'object') {
-      Object.keys(app.state.behaviors).forEach(key => {
-        if (typeof saved.behaviors[key] === 'boolean') setBehavior(key, saved.behaviors[key], false, false);
-      });
-    }
-    updateEffectsCount();
+    setEffectStack(restored.effects, false, false);
+    if (migrated) saveBrushState();
   }
 
   function setBehavior(key, enabled, shouldRecord = true, shouldSave = true) {
-    app.state.behaviors[key] = enabled;
-    const btn = document.querySelector(`.behavior[data-behavior="${key}"]`);
-    if (btn) {
-      btn.classList.toggle('active', enabled);
-      btn.setAttribute('aria-pressed', String(enabled));
+    if (key === 'cycle') {
+      setInk({ type: enabled ? 'cycle' : 'solid', color: app.state.ink.color }, shouldRecord, shouldSave);
+      return;
     }
-    if (shouldRecord) record('behavior', { behavior: key, enabled });
-    updateEffectsCount();
-    if (shouldSave) saveBrushState();
+    if (!EFFECT_IDS.has(key)) return;
+    const next = new Set(app.state.effectStack);
+    if (enabled) next.add(key); else next.delete(key);
+    // Until the ordering UI arrives, ordinary toggles retain the predetermined
+    // legacy execution order. Explicit stacks can still preserve arbitrary order.
+    setEffectStack(legacyOrderedEffectStack([...next]), shouldRecord, shouldSave, { changedEffect: key, enabled });
   }
 
   function getControlsHeight() {
@@ -610,14 +685,18 @@
   });
 
   document.getElementById('selectAllEffectsBtn').addEventListener('click', () => {
-    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, true, false, false));
-    record('behavior-all', { enabled: true });
+    setEffectStack(LEGACY_EFFECT_ORDER, false, false);
+    setInk({ type: 'cycle', color: app.state.ink.color }, false, false);
+    record('effect-stack', { effects: [...app.state.effectStack], enabled: true });
+    record('ink', { ink: { ...app.state.ink } });
     saveBrushState();
   });
 
   document.getElementById('clearAllEffectsBtn').addEventListener('click', () => {
-    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, false, false, false));
-    record('behavior-all', { enabled: false });
+    setEffectStack([], false, false);
+    setInk({ type: 'solid', color: app.state.ink.color }, false, false);
+    record('effect-stack', { effects: [], enabled: false });
+    record('ink', { ink: { ...app.state.ink } });
     saveBrushState();
   });
 
@@ -626,6 +705,8 @@
     btn.classList.add('active');
     btn.setAttribute('aria-pressed', 'true');
     app.state.color = color;
+    app.state.ink = { ...app.state.ink, color };
+    syncBehaviorCompat();
     record('color', { color });
     saveBrushState();
   }
@@ -834,11 +915,20 @@
   }
 
   function cloneState(state) {
+    const legacyBehaviors = state?.behaviors && typeof state.behaviors === 'object' ? state.behaviors : {};
+    const color = parseCssColor(state?.ink?.color || state?.color || '#e53935') || '#e53935';
+    const inkType = state?.ink?.type === 'cycle' || (!state?.ink && legacyBehaviors.cycle) ? 'cycle' : 'solid';
+    const effects = normalizeEffectStack(state?.effects || state?.effectStack || LEGACY_EFFECT_ORDER.filter(id => legacyBehaviors[id]));
+    const behaviors = makeBehaviorCompat();
+    behaviors.cycle = inkType === 'cycle';
+    for (const id of effects) behaviors[id] = true;
     return {
-      color: state?.color || '#e53935',
+      ink: { type: inkType, color },
+      effectStack: [...effects],
+      color,
       size: Number(state?.size) || 16,
-      hue: 0,
-      behaviors: { cycle: false, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false, ...(state?.behaviors || {}) }
+      hue: Number(state?.hue) || 0,
+      behaviors
     };
   }
 
@@ -855,12 +945,10 @@
       state: cloneState(config), cssWidth: logicalWidth, cssHeight: logicalHeight,
       activeTouches: new Map(), particles: [], echoQueue: [], orbitPhase: 0,
       now: 0, random: makeRandom(randomSeed ?? session.randomSeed ?? 1), clockNow: () => replay.now,
-      paintMark(mark, allowEcho = true) {
-        for (const m of B.transformMarks(this, mark)) {
-          drawMark(ctx, m, this);
-          B.addBleedFromMark(this, m);
-        }
-        if (allowEcho) B.scheduleEchoes(this, mark);
+      paintMark(mark, allowEcho = true, pipelineContext = null, startAtEffectIndex = 0) {
+        const workItems = B.processEffectStack(this, mark, { allowEcho, pipelineContext, startAtEffectIndex });
+        for (const work of workItems) drawMark(ctx, work.mark, this);
+        return workItems.length;
       }
     };
     return { replay, canvas, ctx };
@@ -872,24 +960,26 @@
     replay.activeTouches.clear(); replay.particles = []; replay.echoQueue = []; replay.orbitPhase = 0;
   }
 
-  function processReplayEchoes(replay) {
-    if (!replay.echoQueue.length) return;
-    const remain = [];
-    for (const item of replay.echoQueue) {
-      if (item.at <= replay.now) {
-        const mark = { ...item.mark };
-        if (replay.state.behaviors.cycle) mark.color = null;
-        replay.paintMark(mark, false); B.advanceHue(replay, 7, 0.5);
-      } else remain.push(item);
-    }
-    replay.echoQueue = remain;
-  }
+  function processReplayEchoes(replay) { B.processEchoQueue(replay, replay.now); }
 
   function applyReplayEvent(replay, ctx, event) {
     if (event.type === 'config') { replay.state = cloneState(event.state); return; }
-    if (event.type === 'behavior' && event.behavior in replay.state.behaviors) { replay.state.behaviors[event.behavior] = !!event.enabled; return; }
-    if (event.type === 'behavior-all') { Object.keys(replay.state.behaviors).forEach(k => replay.state.behaviors[k] = !!event.enabled); return; }
-    if (event.type === 'color') { replay.state.color = event.color; return; }
+    if (event.type === 'effect-stack') { replay.state = cloneState({ ...replay.state, effects: event.effects }); return; }
+    if (event.type === 'ink') { replay.state = cloneState({ ...replay.state, ink: event.ink }); return; }
+    if (event.type === 'behavior' && event.behavior in replay.state.behaviors) {
+      if (event.behavior === 'cycle') replay.state = cloneState({ ...replay.state, ink: { type: event.enabled ? 'cycle' : 'solid', color: replay.state.color } });
+      else {
+        const next = new Set(replay.state.effectStack);
+        if (event.enabled) next.add(event.behavior); else next.delete(event.behavior);
+        replay.state = cloneState({ ...replay.state, effects: [...next] });
+      }
+      return;
+    }
+    if (event.type === 'behavior-all') {
+      replay.state = cloneState({ ...replay.state, effects: event.enabled ? LEGACY_EFFECT_ORDER : [], ink: { type: event.enabled ? 'cycle' : 'solid', color: replay.state.color } });
+      return;
+    }
+    if (event.type === 'color') { replay.state.color = event.color; replay.state.ink = { ...replay.state.ink, color: event.color }; return; }
     if (event.type === 'size') { replay.state.size = Number(event.size) || replay.state.size; return; }
     if (event.type === 'clear') {
       clearReplay(replay, ctx);
@@ -916,15 +1006,7 @@
     const distance=Math.hypot(t.x-t.px,t.y-t.py), dt=Math.max(1,t.time-t.ptime); t.speed=distance/dt*1000;
     if (distance <= 0.15) return;
     B.advanceHue(replay,distance);
-    replay.paintMark({type:'line',x1:t.px,y1:t.py,x2:t.x,y2:t.y,width:replay.state.size,color:replay.state.behaviors.cycle?null:replay.state.color});
-    if (replay.state.behaviors.connect) {
-      for (const other of replay.activeTouches.values()) {
-        if (other.id===t.id) continue;
-        B.advanceHue(replay,Math.hypot(t.x-other.x,t.y-other.y),0.05);
-        replay.paintMark({type:'line',x1:t.x,y1:t.y,x2:other.x,y2:other.y,width:Math.max(2,replay.state.size*0.58),color:replay.state.behaviors.cycle?null:replay.state.color});
-      }
-    }
-    B.scatterFromSegment(replay,t,distance); B.sprayFromSegment(replay,t,distance); B.bloomFromSegment(replay,t,distance); B.driftFromSegment(replay,t,distance); B.orbitFromSegment(replay,t,distance);
+    replay.paintMark({type:'line',x1:t.px,y1:t.py,x2:t.x,y2:t.y,width:replay.state.size,color:replay.state.behaviors.cycle?null:replay.state.color}, true, { allowImmediateGenerators: true, allowDeferredGenerators: true, touchId: t.id, gesturePhase: 'move', speed: t.speed });
   }
 
   function stateAtEventIndex(events, endIndex) {
@@ -935,18 +1017,27 @@
       const event = events[i];
       if (event.type === 'config' && event.state) {
         const next = cloneState(event.state);
-        state.color = next.color; state.size = next.size; state.hue = next.hue; state.behaviors = next.behaviors;
+        Object.assign(state, next);
+      } else if (event.type === 'effect-stack') {
+        Object.assign(state, cloneState({ ...state, effects: event.effects }));
+      } else if (event.type === 'ink') {
+        Object.assign(state, cloneState({ ...state, ink: event.ink }));
       } else if (event.type === 'behavior' && event.behavior in state.behaviors) {
-        state.behaviors[event.behavior] = !!event.enabled;
+        if (event.behavior === 'cycle') Object.assign(state, cloneState({ ...state, ink: { type: event.enabled ? 'cycle' : 'solid', color: state.color } }));
+        else {
+          const nextEffects = new Set(state.effectStack);
+          if (event.enabled) nextEffects.add(event.behavior); else nextEffects.delete(event.behavior);
+          Object.assign(state, cloneState({ ...state, effects: [...nextEffects] }));
+        }
       } else if (event.type === 'behavior-all') {
-        Object.keys(state.behaviors).forEach(k => state.behaviors[k] = !!event.enabled);
+        Object.assign(state, cloneState({ ...state, effects: event.enabled ? LEGACY_EFFECT_ORDER : [], ink: { type: event.enabled ? 'cycle' : 'solid', color: state.color } }));
       } else if (event.type === 'color') {
-        state.color = event.color;
+        state.color = event.color; state.ink = { ...state.ink, color: event.color };
       } else if (event.type === 'size') {
         state.size = Number(event.size) || state.size;
       } else if (event.type === 'clear' && event.state) {
         const next = cloneState(event.state);
-        state.color = next.color; state.size = next.size; state.hue = next.hue; state.behaviors = next.behaviors;
+        Object.assign(state, next);
       }
     }
     return state;
@@ -955,7 +1046,7 @@
   async function renderPerformanceGif() {
     if (gifResult.rendering || !window.CanvasGifEncoder) return;
     const events = app.session?.events || [];
-    const artisticTypes = new Set(['down','move','up','cancel','clear','behavior','behavior-all','color','size','canvas-size']);
+    const artisticTypes = new Set(['down','move','up','cancel','clear','effect-stack','ink','behavior','behavior-all','color','size','canvas-size']);
 
     let lastClearIndex = -1;
     for (let i = events.length - 1; i >= 0; i--) {

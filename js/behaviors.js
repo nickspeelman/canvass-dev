@@ -1,6 +1,50 @@
 (() => {
   const TAU = Math.PI * 2;
 
+  // Checkpoint 4.5: engine-level safety governor. These limits are deliberately
+  // high enough to leave ordinary drawings untouched while preventing
+  // multiplicative effect stacks from producing unbounded work.
+  const SAFETY_LIMITS = Object.freeze({
+    maxActiveParticles: 480,
+    maxPipelineWorkItems: 512,
+    maxDeferredPaintCallsPerStep: 480,
+    maxDeferredRenderedMarksPerStep: 2400,
+    maxQueuedEchoes: 480,
+    maxEchoPaintCallsPerStep: 160,
+    maxEchoRenderedMarksPerStep: 2400
+  });
+
+  function safetyStats(app) {
+    if (!app._safetyStats) {
+      app._safetyStats = {
+        droppedParticles: 0,
+        droppedPipelineItems: 0,
+        skippedDeferredPaintCalls: 0,
+        limitedPipelineCalls: 0,
+        droppedEchoes: 0,
+        deferredEchoes: 0
+      };
+    }
+    return app._safetyStats;
+  }
+
+  function addParticle(app, particle) {
+    if (app.particles.length >= SAFETY_LIMITS.maxActiveParticles) {
+      safetyStats(app).droppedParticles++;
+      return false;
+    }
+    app.particles.push(particle);
+    return true;
+  }
+
+  function capWorkItems(app, items, limit) {
+    if (items.length <= limit) return items;
+    const stats = safetyStats(app);
+    stats.droppedPipelineItems += items.length - limit;
+    stats.limitedPipelineCalls++;
+    return items.slice(0, limit);
+  }
+
   function rotatePoint(x, y, cx, cy, angle) {
     const dx = x - cx;
     const dy = y - cy;
@@ -83,10 +127,303 @@
     return { ...mark, x: p.x, y: p.y };
   }
 
+  const LEGACY_EFFECT_ORDER = Object.freeze([
+    'connect', 'scatter', 'spray', 'bloom', 'drift', 'orbit',
+    'echo', 'flow', 'fractal', 'offset', 'radial', 'mirror', 'bleed'
+  ]);
+
+  function mirrorMark(mark, width) {
+    const mirrored = { ...mark };
+    if (mirrored.type === 'line') {
+      mirrored.x1 = width - mirrored.x1;
+      mirrored.x2 = width - mirrored.x2;
+    } else {
+      mirrored.x = width - mirrored.x;
+    }
+    return mirrored;
+  }
+
+  const pureTransforms = {
+    flow: {
+      transform(app, marks) {
+        return marks.map(mark => flowMark(mark, app));
+      }
+    },
+    fractal: {
+      transform(app, marks) {
+        const expanded = [];
+        for (const mark of marks) {
+          if (mark.noFractal) expanded.push(mark);
+          else expanded.push(...(mark.type === 'line' ? fractalizeLine(mark) : fractalizeDab(mark)));
+        }
+        return expanded;
+      }
+    },
+    offset: {
+      transform(app, marks) {
+        return marks.map(mark => offsetMark(mark, app.cssWidth, app.cssHeight));
+      }
+    },
+    radial: {
+      transform(app, marks) {
+        const cx = app.cssWidth / 2;
+        const cy = app.cssHeight / 2;
+        const out = [];
+        for (const mark of marks) {
+          for (let i = 0; i < 6; i++) out.push(rotateMark(mark, cx, cy, i * TAU / 6));
+        }
+        return out;
+      }
+    },
+    mirror: {
+      transform(app, marks) {
+        return marks.concat(marks.map(mark => mirrorMark(mark, app.cssWidth)));
+      }
+    }
+  };
+
+  function markEndPoint(mark) {
+    if (mark.type === 'line') return { x: mark.x2, y: mark.y2 };
+    return { x: mark.x, y: mark.y };
+  }
+
+  function markDistance(mark) {
+    if (mark.type !== 'line') return 0;
+    return Math.hypot(mark.x2 - mark.x1, mark.y2 - mark.y1);
+  }
+
+  const immediateGenerators = {
+    connect: {
+      generate(app, work, maxGenerated = Infinity) {
+        if (maxGenerated <= 0 || !work.pipelineContext?.allowImmediateGenerators || work.mark.type !== 'line' || app.activeTouches.size < 2) return [];
+        const point = markEndPoint(work.mark);
+        const generated = [];
+        for (const other of app.activeTouches.values()) {
+          if (other.id === work.pipelineContext.touchId) continue;
+          const connector = {
+            type: 'line', x1: point.x, y1: point.y, x2: other.x, y2: other.y,
+            width: Math.max(2, app.state.size * 0.58),
+            color: app.state.behaviors.cycle ? null : app.state.color
+          };
+          this.advanceHue(app, Math.hypot(point.x - other.x, point.y - other.y), 0.05);
+          generated.push({ ...work, mark: connector, pipelineGroup: {} });
+          if (generated.length >= maxGenerated) break;
+        }
+        return generated;
+      }
+    },
+    spray: {
+      generate(app, work, maxGenerated = Infinity) {
+        if (maxGenerated <= 0 || !work.pipelineContext?.allowImmediateGenerators || work.mark.type !== 'line') return [];
+        const distance = markDistance(work.mark);
+        if (distance < 0.35) return [];
+        const count = Math.min(maxGenerated, 34, Math.max(5, Math.floor(distance * 1.4)));
+        const radius = Math.max(18, app.state.size * 2.8);
+        const generated = [];
+        for (let i = 0; i < count; i++) {
+          const t = (app.random ? app.random() : Math.random());
+          const cx = work.mark.x1 + (work.mark.x2-work.mark.x1)*t, cy = work.mark.y1 + (work.mark.y2-work.mark.y1)*t;
+          const a = (app.random ? app.random() : Math.random())*TAU;
+          const r = radius * Math.pow((app.random ? app.random() : Math.random()), 1.8);
+          this.advanceHue(app, 0.7, 0.08);
+          const dab = { type:'dab', x:cx+Math.cos(a)*r, y:cy+Math.sin(a)*r,
+            width: Math.max(1.2, app.state.size*(0.08+(app.random ? app.random() : Math.random())*0.13)),
+            color: app.state.behaviors.cycle ? null : app.state.color, alpha:0.22+(app.random ? app.random() : Math.random())*0.34 };
+          generated.push({ ...work, mark: dab, pipelineGroup: {} });
+        }
+        return generated;
+      }
+    },
+    orbit: {
+      generate(app, work, maxGenerated = Infinity) {
+        if (maxGenerated <= 0 || !work.pipelineContext?.allowImmediateGenerators || work.mark.type !== 'line' || app.activeTouches.size < 2) return [];
+        const distance = markDistance(work.mark);
+        if (distance < 0.2) return [];
+        app.orbitPhase=(app.orbitPhase+distance*0.012)%TAU;
+        const generated = [];
+        for (const other of app.activeTouches.values()) {
+          if (other.id===work.pipelineContext.touchId) continue;
+          const phase=Math.PI/2+app.orbitPhase;
+          const a=rotatePoint(work.mark.x1,work.mark.y1,other.x,other.y,phase), b=rotatePoint(work.mark.x2,work.mark.y2,other.x,other.y,phase);
+          this.advanceHue(app,distance,0.22);
+          const orbital = {type:'line',x1:a.x,y1:a.y,x2:b.x,y2:b.y,width:Math.max(2,app.state.size*0.72),color:app.state.behaviors.cycle?null:app.state.color};
+          generated.push({ ...work, mark: orbital, pipelineGroup: {} });
+          if (generated.length >= maxGenerated) break;
+        }
+        return generated;
+      }
+    }
+  };
+
+  function randomValue(app) {
+    return app.random ? app.random() : Math.random();
+  }
+
+  function particleResumeContext(work) {
+    return {
+      ...(work.pipelineContext || {}),
+      allowImmediateGenerators: true,
+      allowDeferredGenerators: true,
+      gesturePhase: 'deferred'
+    };
+  }
+
+  const ECHO_DELAYS = Object.freeze([260, 620, 1120]);
+  const ECHO_OFFSETS = Object.freeze([5, 10, 16]);
+  const ECHO_ALPHAS = Object.freeze([0.58, 0.36, 0.20]);
+
+  function queueEchoes(app, mark, resumeAtEffectIndex, pipelineContext) {
+    if (mark.noEcho) return;
+    const now = app.clockNow ? app.clockNow() : performance.now();
+    for (let index = 0; index < ECHO_DELAYS.length; index++) {
+      if (app.echoQueue.length >= SAFETY_LIMITS.maxQueuedEchoes) {
+        safetyStats(app).droppedEchoes++;
+        break;
+      }
+      const offset = ECHO_OFFSETS[index] ?? (5 * (index + 1));
+      const alpha = (mark.alpha ?? 1) * (ECHO_ALPHAS[index] ?? 0.25);
+      const echoed = { ...mark, echoed: true, alpha };
+      delete echoed.noEcho;
+      if (echoed.type === 'line') {
+        echoed.x1 += offset; echoed.y1 += offset;
+        echoed.x2 += offset; echoed.y2 += offset;
+      } else {
+        echoed.x += offset; echoed.y += offset;
+      }
+      app.echoQueue.push({
+        at: now + ECHO_DELAYS[index],
+        mark: echoed,
+        resumeAtEffectIndex,
+        pipelineContext: { ...(pipelineContext || {}) }
+      });
+    }
+  }
+
+  const deferredGenerators = {
+    echo: {
+      defer(app, work, effectIndex) {
+        queueEchoes(app, work.mark, effectIndex + 1, work.pipelineContext);
+      }
+    },
+    scatter: {
+      defer(app, work, effectIndex) {
+        if (!work.pipelineContext?.allowDeferredGenerators || work.mark.type !== 'line') return;
+        const distance = markDistance(work.mark);
+        if (distance < 0.5) return;
+        const count = Math.min(12, Math.max(1, Math.floor(distance / 5)));
+        const speed = work.pipelineContext?.speed || 0;
+        const base = Math.min(6, 0.7 + speed * 0.035);
+        for (let i = 0; i < count; i++) {
+          const t = randomValue(app);
+          const x = work.mark.x1 + (work.mark.x2 - work.mark.x1) * t;
+          const y = work.mark.y1 + (work.mark.y2 - work.mark.y1) * t;
+          const angle = randomValue(app) * TAU;
+          const kick = base * (0.4 + randomValue(app));
+          addParticle(app, {
+            x, y, vx: Math.cos(angle) * kick, vy: Math.sin(angle) * kick,
+            life: 0.5 + randomValue(app) * 1.1, age: 0,
+            radius: Math.max(1.2, app.state.size * (0.10 + randomValue(app) * 0.12)),
+            color: app.state.behaviors.cycle ? null : app.state.color,
+            lastX: x, lastY: y, kind: 'scatter',
+            resumeAtEffectIndex: effectIndex + 1,
+            pipelineContext: particleResumeContext(work)
+          });
+        }
+      }
+    },
+    bloom: {
+      defer(app, work, effectIndex) {
+        if (!work.pipelineContext?.allowDeferredGenerators || work.mark.type !== 'line') return;
+        const distance = markDistance(work.mark);
+        if (distance < 1.4) return;
+        const chance = Math.min(0.85, distance / 12);
+        if (randomValue(app) > chance) return;
+        const t = randomValue(app);
+        const x = work.mark.x1 + (work.mark.x2 - work.mark.x1) * t;
+        const y = work.mark.y1 + (work.mark.y2 - work.mark.y1) * t;
+        addParticle(app, {
+          x, y, vx: 0, vy: 0, life: 0.75 + randomValue(app) * 0.8, age: 0,
+          radius: Math.max(8, app.state.size * (0.75 + randomValue(app) * 0.8)),
+          color: app.state.behaviors.cycle ? null : app.state.color,
+          lastX: x, lastY: y, kind: 'bloom', seed: randomValue(app) * 1000,
+          resumeAtEffectIndex: effectIndex + 1,
+          pipelineContext: particleResumeContext(work)
+        });
+      }
+    },
+    drift: {
+      defer(app, work, effectIndex) {
+        if (!work.pipelineContext?.allowDeferredGenerators || work.mark.type !== 'line') return;
+        const dx = work.mark.x2 - work.mark.x1;
+        const dy = work.mark.y2 - work.mark.y1;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 0.5) return;
+        const mag = Math.max(0.001, distance);
+        const speed = Math.min(7.5, 0.8 + (work.pipelineContext?.speed || 0) * 0.012);
+        addParticle(app, {
+          x: work.mark.x2, y: work.mark.y2, vx: dx / mag * speed, vy: dy / mag * speed,
+          life: 0.9 + Math.min(1.4, distance / 35), age: 0,
+          radius: Math.max(1.5, app.state.size * 0.33),
+          color: app.state.behaviors.cycle ? null : app.state.color,
+          lastX: work.mark.x2, lastY: work.mark.y2, kind: 'drift',
+          resumeAtEffectIndex: effectIndex + 1,
+          pipelineContext: particleResumeContext(work)
+        });
+      }
+    },
+    bleed: {
+      defer(app, work, effectIndex) {
+        const mark = work.mark;
+        if (mark.noBleed || app.particles.length >= SAFETY_LIMITS.maxActiveParticles) return;
+        const baseColor = app.state.behaviors.cycle ? null : (mark.color || app.state.color);
+        const resumeAtEffectIndex = effectIndex + 1;
+        const pipelineContext = particleResumeContext(work);
+        if (mark.type === 'line') {
+          const dx = mark.x2 - mark.x1, dy = mark.y2 - mark.y1;
+          const len = Math.hypot(dx, dy);
+          const samples = Math.min(4, Math.max(1, Math.ceil(len / 24)));
+          for (let i = 0; i < samples; i++) {
+            const t = samples === 1 ? 0.5 : i / (samples - 1);
+            const x = mark.x1 + dx * t, y = mark.y1 + dy * t;
+            addParticle(app, {
+              x, y, vx: 0, vy: 0, life: 1.15 + randomValue(app) * 1.05, age: 0,
+              radius: Math.max(5, (mark.width || app.state.size) * (0.55 + randomValue(app) * 0.35)),
+              color: baseColor, lastX: x, lastY: y, kind: 'bleed', seed: randomValue(app) * 1000,
+              resumeAtEffectIndex, pipelineContext
+            });
+          }
+        } else {
+          addParticle(app, {
+            x: mark.x, y: mark.y, vx: 0, vy: 0, life: 1.25 + randomValue(app) * 1.0, age: 0,
+            radius: Math.max(5, (mark.width || app.state.size) * (0.6 + randomValue(app) * 0.35)),
+            color: baseColor, lastX: mark.x, lastY: mark.y, kind: 'bleed', seed: randomValue(app) * 1000,
+            resumeAtEffectIndex, pipelineContext
+          });
+        }
+      }
+    }
+  };
+
+  const effectRegistry = Object.freeze(Object.fromEntries(
+    LEGACY_EFFECT_ORDER.map((id, legacyIndex) => [
+      id,
+      Object.freeze({
+        id, legacyIndex,
+        ...(pureTransforms[id] || {}),
+        ...(immediateGenerators[id] || {}),
+        ...(deferredGenerators[id] || {})
+      })
+    ])
+  ));
+
   window.TouchBehaviors = {
-    echoDelays: [260, 620, 1120],
-    echoOffsets: [5, 10, 16],
-    echoAlphas: [0.58, 0.36, 0.20],
+    safetyLimits: SAFETY_LIMITS,
+    getSafetyStats(app) { return { ...safetyStats(app), activeParticles: app.particles.length }; },
+    legacyEffectOrder: LEGACY_EFFECT_ORDER,
+    effectRegistry,
+    echoDelays: ECHO_DELAYS,
+    echoOffsets: ECHO_OFFSETS,
+    echoAlphas: ECHO_ALPHAS,
     radialCopies: 6,
 
     resolveColor(app, snapshotColor = null) {
@@ -99,150 +436,152 @@
       app.state.hue = (app.state.hue + Math.max(0.8, distance * 0.38) * multiplier) % 360;
     },
 
+    processEffectStack(app, mark, options = {}) {
+      const stack = Array.isArray(app.state.effectStack) ? app.state.effectStack : [];
+      const pipelineContext = options.pipelineContext || null;
+      const requestedLimit = Number.isFinite(pipelineContext?.workItemLimit) ? Math.max(1, Math.floor(pipelineContext.workItemLimit)) : SAFETY_LIMITS.maxPipelineWorkItems;
+      const workItemLimit = Math.min(SAFETY_LIMITS.maxPipelineWorkItems, requestedLimit);
+      let workItems = [{ mark, pipelineContext, pipelineGroup: {} }];
+
+      // Ordered transforms, generators, and deferred stages share the same
+      // ordered registry path. Generated marks remain in the work list, so they
+      // continue through every effect that follows their generator.
+      for (let effectIndex = options.startAtEffectIndex || 0; effectIndex < stack.length; effectIndex++) {
+        const effectId = stack[effectIndex];
+        const effect = effectRegistry[effectId];
+        if (!effect || (effectId === 'echo' && options.allowEcho === false)) continue;
+
+        if (effect.transform) {
+          // Preserve the legacy per-paint-call batching semantics. Immediate
+          // generators create new groups, and every later transform is applied
+          // independently to each group in creation order.
+          const groups = [];
+          const byGroup = new Map();
+          for (const work of workItems) {
+            let group = byGroup.get(work.pipelineGroup);
+            if (!group) { group = []; byGroup.set(work.pipelineGroup, group); groups.push(group); }
+            group.push(work);
+          }
+          const next = [];
+          for (const group of groups) {
+            const template = group[0];
+            const transformed = effect.transform(app, group.map(work => work.mark));
+            for (const transformedMark of transformed) next.push({ ...template, mark: transformedMark });
+          }
+          workItems = capWorkItems(app, next, workItemLimit);
+        }
+
+        if (effect.generate) {
+          const next = [];
+          for (const work of workItems) {
+            if (next.length >= workItemLimit) break;
+            next.push(work);
+            const remaining = workItemLimit - next.length;
+            if (remaining > 0) next.push(...effect.generate.call(this, app, work, remaining));
+          }
+          workItems = capWorkItems(app, next, workItemLimit);
+        }
+
+        if (effect.defer) {
+          for (const work of workItems) effect.defer.call(this, app, work, effectIndex);
+        }
+      }
+      return workItems;
+    },
+
     transformMarks(app, mark) {
-      let marks = [mark];
-
-      // Flow deforms the coordinate field rather than adding decorative particles.
-      if (app.state.behaviors.flow) marks = marks.map(base => flowMark(base, app));
-
-      // Fractal expands one gesture into a shallow branching family.
-      if (app.state.behaviors.fractal && !mark.noFractal) {
-        const expanded = [];
-        for (const base of marks) expanded.push(...(base.type === 'line' ? fractalizeLine(base) : fractalizeDab(base)));
-        marks = expanded;
-      }
-
-      // Offset replaces the source location with its point-reflected location.
-      if (app.state.behaviors.offset) marks = marks.map(base => offsetMark(base, app.cssWidth, app.cssHeight));
-
-      if (app.state.behaviors.radial) {
-        const cx = app.cssWidth / 2, cy = app.cssHeight / 2;
-        const radial = [];
-        for (const base of marks) {
-          for (let i = 0; i < this.radialCopies; i++) radial.push(rotateMark(base, cx, cy, i * TAU / this.radialCopies));
-        }
-        marks = radial;
-      }
-
-      if (app.state.behaviors.mirror) {
-        const w = app.cssWidth;
-        const mirrored = marks.map(base => {
-          const m = { ...base };
-          if (m.type === 'line') { m.x1 = w - m.x1; m.x2 = w - m.x2; }
-          else m.x = w - m.x;
-          return m;
-        });
-        marks = marks.concat(mirrored);
-      }
-      return marks;
+      // Compatibility helper used by tests/older callers. Immediate generators
+      // require pipelineContext and therefore remain inert here.
+      return this.processEffectStack(app, mark, { allowEcho: false }).map(work => work.mark);
     },
 
-    scheduleEchoes(app, mark) {
-      if (!app.state.behaviors.echo || mark.noEcho) return;
-      const now = app.clockNow ? app.clockNow() : performance.now();
-      this.echoDelays.forEach((delay, index) => {
-        const offset = this.echoOffsets[index] ?? (5 * (index + 1));
-        const alpha = (mark.alpha ?? 1) * (this.echoAlphas[index] ?? 0.25);
-        const echoed = { ...mark, echoed: true, noEcho: true, alpha };
-        if (echoed.type === 'line') {
-          echoed.x1 += offset; echoed.y1 += offset;
-          echoed.x2 += offset; echoed.y2 += offset;
-        } else {
-          echoed.x += offset; echoed.y += offset;
-        }
-        app.echoQueue.push({ at: now + delay, mark: echoed });
-      });
+    scheduleEchoes(app, mark, resumeAtEffectIndex = 0, pipelineContext = null) {
+      // Compatibility helper. The ordered registry now schedules Echo at its
+      // actual stack position; older/debug callers may still invoke this.
+      if (!app.state.behaviors.echo) return;
+      queueEchoes(app, mark, resumeAtEffectIndex, pipelineContext);
     },
 
+    processEchoQueue(app, now) {
+      if (!app.echoQueue.length) return;
+      const remain = [];
+      let paintCallsLeft = SAFETY_LIMITS.maxEchoPaintCallsPerStep;
+      let renderedMarksLeft = SAFETY_LIMITS.maxEchoRenderedMarksPerStep;
+      const stats = safetyStats(app);
+
+      for (const item of app.echoQueue) {
+        if (item.at > now) { remain.push(item); continue; }
+        if (paintCallsLeft <= 0 || renderedMarksLeft <= 0) {
+          remain.push(item);
+          stats.deferredEchoes++;
+          continue;
+        }
+        const mark = { ...item.mark };
+        if (app.state.behaviors.cycle) mark.color = null;
+        const context = { ...(item.pipelineContext || {}), workItemLimit: renderedMarksLeft };
+        paintCallsLeft--;
+        const rendered = app.paintMark(mark, true, context, item.resumeAtEffectIndex || 0) || 0;
+        renderedMarksLeft = Math.max(0, renderedMarksLeft - rendered);
+        this.advanceHue(app, 7, 0.5);
+      }
+      app.echoQueue = remain;
+    },
+
+    // Checkpoint 4 compatibility wrappers. The live and replay engines no
+    // longer call these directly; deferred effects are spawned by the ordered
+    // registry above. They remain temporarily for older/debug callers.
     addBleedFromMark(app, mark) {
-      if (!app.state.behaviors.bleed || mark.noBleed) return;
-      if (app.particles.length > 520) return;
-
-      const baseColor = app.state.behaviors.cycle ? null : (mark.color || app.state.color);
-      if (mark.type === 'line') {
-        const dx = mark.x2 - mark.x1, dy = mark.y2 - mark.y1;
-        const len = Math.hypot(dx, dy);
-        const samples = Math.min(4, Math.max(1, Math.ceil(len / 24)));
-        for (let i = 0; i < samples; i++) {
-          const t = samples === 1 ? 0.5 : i / (samples - 1);
-          const x = mark.x1 + dx * t, y = mark.y1 + dy * t;
-          app.particles.push({ x, y, vx:0, vy:0, life:1.15 + (app.random ? app.random() : Math.random())*1.05, age:0,
-            radius:Math.max(5, (mark.width || app.state.size) * (0.55 + (app.random ? app.random() : Math.random())*0.35)),
-            color:baseColor, lastX:x, lastY:y, kind:'bleed', seed:(app.random ? app.random() : Math.random())*1000 });
-        }
-      } else {
-        app.particles.push({ x:mark.x, y:mark.y, vx:0, vy:0, life:1.25 + (app.random ? app.random() : Math.random())*1.0, age:0,
-          radius:Math.max(5, (mark.width || app.state.size) * (0.6 + (app.random ? app.random() : Math.random())*0.35)),
-          color:baseColor, lastX:mark.x, lastY:mark.y, kind:'bleed', seed:(app.random ? app.random() : Math.random())*1000 });
-      }
+      const index = app.state.effectStack.indexOf('bleed');
+      if (index < 0) return;
+      deferredGenerators.bleed.defer.call(this, app, { mark, pipelineContext: null }, index);
     },
 
     scatterFromSegment(app, touch, distance) {
-      if (!app.state.behaviors.scatter || distance < 0.5) return;
-      const count = Math.min(12, Math.max(1, Math.floor(distance / 5)));
-      const speed = touch.speed || 0;
-      const base = Math.min(6, 0.7 + speed * 0.035);
-      for (let i = 0; i < count; i++) {
-        const t = (app.random ? app.random() : Math.random()), x = touch.px + (touch.x - touch.px) * t, y = touch.py + (touch.y - touch.py) * t;
-        const angle = (app.random ? app.random() : Math.random()) * TAU, kick = base * (0.4 + (app.random ? app.random() : Math.random()));
-        app.particles.push({ x, y, vx: Math.cos(angle)*kick, vy: Math.sin(angle)*kick,
-          life: 0.5 + (app.random ? app.random() : Math.random())*1.1, age: 0,
-          radius: Math.max(1.2, app.state.size*(0.10 + (app.random ? app.random() : Math.random())*0.12)),
-          color: app.state.behaviors.cycle ? null : app.state.color, lastX:x, lastY:y, kind:'scatter' });
-      }
-    },
-
-    sprayFromSegment(app, touch, distance) {
-      if (!app.state.behaviors.spray || distance < 0.35) return;
-      const count = Math.min(34, Math.max(5, Math.floor(distance * 1.4)));
-      const radius = Math.max(18, app.state.size * 2.8);
-      for (let i = 0; i < count; i++) {
-        const t = (app.random ? app.random() : Math.random());
-        const cx = touch.px + (touch.x-touch.px)*t, cy = touch.py + (touch.y-touch.py)*t;
-        const a = (app.random ? app.random() : Math.random())*TAU;
-        const r = radius * Math.pow((app.random ? app.random() : Math.random()), 1.8); // dense center, soft edge
-        this.advanceHue(app, 0.7, 0.08);
-        app.paintMark({ type:'dab', x:cx+Math.cos(a)*r, y:cy+Math.sin(a)*r,
-          width: Math.max(1.2, app.state.size*(0.08+(app.random ? app.random() : Math.random())*0.13)),
-          color: app.state.behaviors.cycle ? null : app.state.color, alpha:0.22+(app.random ? app.random() : Math.random())*0.34, noEcho:true }, false);
-      }
+      const index = app.state.effectStack.indexOf('scatter');
+      if (index < 0 || distance < 0.5) return;
+      deferredGenerators.scatter.defer.call(this, app, {
+        mark: { type:'line', x1:touch.px, y1:touch.py, x2:touch.x, y2:touch.y },
+        pipelineContext: { speed: touch.speed || 0, touchId: touch.id, gesturePhase: 'move', allowDeferredGenerators: true }
+      }, index);
     },
 
     bloomFromSegment(app, touch, distance) {
-      if (!app.state.behaviors.bloom || distance < 1.4) return;
-      const chance = Math.min(0.85, distance / 12);
-      if ((app.random ? app.random() : Math.random()) > chance) return;
-      const t = (app.random ? app.random() : Math.random());
-      const x = touch.px+(touch.x-touch.px)*t, y = touch.py+(touch.y-touch.py)*t;
-      app.particles.push({ x,y,vx:0,vy:0,life:0.75+(app.random ? app.random() : Math.random())*0.8,age:0,
-        radius:Math.max(8, app.state.size*(0.75+(app.random ? app.random() : Math.random())*0.8)),
-        color:app.state.behaviors.cycle ? null : app.state.color,lastX:x,lastY:y,kind:'bloom',seed:(app.random ? app.random() : Math.random())*1000 });
+      const index = app.state.effectStack.indexOf('bloom');
+      if (index < 0 || distance < 1.4) return;
+      deferredGenerators.bloom.defer.call(this, app, {
+        mark: { type:'line', x1:touch.px, y1:touch.py, x2:touch.x, y2:touch.y },
+        pipelineContext: { speed: touch.speed || 0, touchId: touch.id, gesturePhase: 'move', allowDeferredGenerators: true }
+      }, index);
     },
 
     driftFromSegment(app, touch, distance) {
-      if (!app.state.behaviors.drift || distance < 0.5) return;
-      const dx=touch.x-touch.px, dy=touch.y-touch.py, mag=Math.max(0.001,Math.hypot(dx,dy));
-      const speed=Math.min(7.5,0.8+(touch.speed||0)*0.012);
-      app.particles.push({x:touch.x,y:touch.y,vx:dx/mag*speed,vy:dy/mag*speed,
-        life:0.9+Math.min(1.4,distance/35),age:0,radius:Math.max(1.5,app.state.size*0.33),
-        color:app.state.behaviors.cycle?null:app.state.color,lastX:touch.x,lastY:touch.y,kind:'drift'});
-    },
-
-    orbitFromSegment(app, touch, distance) {
-      if (!app.state.behaviors.orbit || distance < 0.2 || app.activeTouches.size < 2) return;
-      app.orbitPhase=(app.orbitPhase+distance*0.012)%TAU;
-      for (const other of app.activeTouches.values()) {
-        if (other.id===touch.id) continue;
-        const phase=Math.PI/2+app.orbitPhase;
-        const a=rotatePoint(touch.px,touch.py,other.x,other.y,phase), b=rotatePoint(touch.x,touch.y,other.x,other.y,phase);
-        this.advanceHue(app,distance,0.22);
-        app.paintMark({type:'line',x1:a.x,y1:a.y,x2:b.x,y2:b.y,width:Math.max(2,app.state.size*0.72),color:app.state.behaviors.cycle?null:app.state.color});
-      }
+      const index = app.state.effectStack.indexOf('drift');
+      if (index < 0 || distance < 0.5) return;
+      deferredGenerators.drift.defer.call(this, app, {
+        mark: { type:'line', x1:touch.px, y1:touch.py, x2:touch.x, y2:touch.y },
+        pipelineContext: { speed: touch.speed || 0, touchId: touch.id, gesturePhase: 'move', allowDeferredGenerators: true }
+      }, index);
     },
 
     updateParticles(app, dt) {
       if (!app.particles.length) return;
       const keep=[];
+      let paintCallsLeft = SAFETY_LIMITS.maxDeferredPaintCallsPerStep;
+      let renderedMarksLeft = SAFETY_LIMITS.maxDeferredRenderedMarksPerStep;
+      const stats = safetyStats(app);
+
+      const emit = (mark, p) => {
+        if (paintCallsLeft <= 0 || renderedMarksLeft <= 0) {
+          stats.skippedDeferredPaintCalls++;
+          return false;
+        }
+        const context = { ...(p.pipelineContext || {}), workItemLimit: renderedMarksLeft };
+        paintCallsLeft--;
+        const rendered = app.paintMark(mark, true, context, p.resumeAtEffectIndex || 0) || 0;
+        renderedMarksLeft = Math.max(0, renderedMarksLeft - rendered);
+        return true;
+      };
+
       for (const p of app.particles) {
         p.age+=dt;
         if (p.age>=p.life) continue;
@@ -255,9 +594,9 @@
             const a=(p.seed*0.017+i*2.399+progress*4.2)%TAU;
             const radial=spread*Math.pow((i+1)/deposits,0.78)*(0.72+0.25*Math.sin(p.seed+i*1.7+progress*6));
             this.advanceHue(app,0.35,0.035);
-            app.paintMark({type:'dab',x:p.x+Math.cos(a)*radial,y:p.y+Math.sin(a)*radial,
-              width:Math.max(1.2,p.radius*(0.34+0.18*(1-progress))),color:p.color,noEcho:true,noBleed:true,noFractal:true,
-              alpha:Math.max(0.018,0.075*(1-progress))},false);
+            emit({type:'dab',x:p.x+Math.cos(a)*radial,y:p.y+Math.sin(a)*radial,
+              width:Math.max(1.2,p.radius*(0.34+0.18*(1-progress))),color:p.color,noBleed:true,noFractal:true,
+              alpha:Math.max(0.018,0.075*(1-progress))}, p);
           }
           keep.push(p); continue;
         }
@@ -270,8 +609,8 @@
             const a=i*TAU/points;
             const wobble=1+0.13*Math.sin(i*2.7+p.seed)+0.07*Math.sin(progress*8+p.seed+i);
             this.advanceHue(app,0.5,0.05);
-            app.paintMark({type:'dab',x:p.x+Math.cos(a)*R*wobble,y:p.y+Math.sin(a)*R*wobble,
-              width:Math.max(1.5,p.radius*0.28),color:p.color,noEcho:true,alpha:0.16*(1-progress)+0.035},false);
+            emit({type:'dab',x:p.x+Math.cos(a)*R*wobble,y:p.y+Math.sin(a)*R*wobble,
+              width:Math.max(1.5,p.radius*0.28),color:p.color,alpha:0.16*(1-progress)+0.035}, p);
           }
           keep.push(p); continue;
         }
@@ -282,9 +621,9 @@
         const dist=Math.hypot(p.x-p.lastX,p.y-p.lastY);
         this.advanceHue(app,dist,p.kind==='drift'?0.28:0.18);
         const lifeLeft=Math.max(0.05,1-p.age/p.life);
-        app.paintMark({type:'line',x1:p.lastX,y1:p.lastY,x2:p.x,y2:p.y,
-          width:Math.max(1,p.radius*(p.kind==='drift'?1.25:1.7)),color:p.color,noEcho:true,
-          alpha:Math.max(p.kind==='drift'?0.08:0.12,lifeLeft)},false);
+        emit({type:'line',x1:p.lastX,y1:p.lastY,x2:p.x,y2:p.y,
+          width:Math.max(1,p.radius*(p.kind==='drift'?1.25:1.7)),color:p.color,
+          alpha:Math.max(p.kind==='drift'?0.08:0.12,lifeLeft)}, p);
         keep.push(p);
       }
       app.particles=keep;
