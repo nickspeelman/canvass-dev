@@ -84,7 +84,9 @@
   }
 
   window.TouchBehaviors = {
-    echoDelays: [260, 620, 1120],
+    echoDelays: [500, 800, 1200],
+    echoOffsets: [3, 6, 9],
+    echoAlphas: [0.5, 0.3, 0.15],
     radialCopies: 6,
 
     resolveColor(app, snapshotColor = null) {
@@ -138,7 +140,18 @@
     scheduleEchoes(app, mark) {
       if (!app.state.behaviors.echo || mark.noEcho) return;
       const now = app.clockNow ? app.clockNow() : performance.now();
-      for (const delay of this.echoDelays) app.echoQueue.push({ at: now + delay, mark: { ...mark, echoed: true } });
+      this.echoDelays.forEach((delay, index) => {
+        const offset = this.echoOffsets[index] ?? (7 * (index + 1));
+        const alpha = (mark.alpha ?? 1) * (this.echoAlphas[index] ?? 0.25);
+        const echoed = { ...mark, echoed: true, noEcho: true, alpha };
+        if (echoed.type === 'line') {
+          echoed.x1 += offset; echoed.y1 += offset;
+          echoed.x2 += offset; echoed.y2 += offset;
+        } else {
+          echoed.x += offset; echoed.y += offset;
+        }
+        app.echoQueue.push({ at: now + delay, mark: echoed });
+      });
     },
 
     addBleedFromMark(app, mark) {

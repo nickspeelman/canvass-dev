@@ -1074,33 +1074,6 @@
       (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
   }
 
-  async function saveBlobForUser(blob, filename) {
-    // Mobile browsers, especially iOS Safari/PWAs, can ignore a synthetic
-    // <a download> click for blob URLs. File sharing is the reliable native
-    // save path there and exposes Save to Photos/Files (or the platform equivalent).
-    if (isMobileSaveEnvironment() && typeof File === 'function' && navigator.share) {
-      const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-      let canShare = true;
-      try {
-        canShare = !navigator.canShare || navigator.canShare({ files: [file] });
-      } catch (_) {
-        canShare = false;
-      }
-      if (canShare) {
-        try {
-          await navigator.share({ files: [file] });
-          return true;
-        } catch (error) {
-          if (error?.name === 'AbortError') return false;
-          console.warn('Native file share failed; falling back to browser download.', error);
-        }
-      }
-    }
-
-    downloadBlob(blob, filename);
-    return true;
-  }
-
   function dataUrlToBlob(dataUrl) {
     const comma = dataUrl.indexOf(',');
     const header = dataUrl.slice(0, comma);
@@ -1129,16 +1102,14 @@
     const filename = `canvas-${timestampName()}.png`;
 
     if (isMobileSaveEnvironment()) {
-      // Keep file creation inside the original tap. Delaying it through
-      // canvas.toBlob() can cause mobile browsers to discard user activation
-      // before the native save/share action starts.
+      // Keep file creation + download inside the original tap. The main Save
+      // action is always a download; sharing is only available from Share.
       try {
         const blob = dataUrlToBlob(canvas.toDataURL('image/png'));
-        saveBlobForUser(blob, filename).then(saved => {
-          if (saved) record('download-image', { source });
-        });
+        downloadBlob(blob, filename);
+        record('download-image', { source, direct: true });
       } catch (error) {
-        console.error('Could not prepare image for saving.', error);
+        console.error('Could not prepare image for download.', error);
       }
       return;
     }

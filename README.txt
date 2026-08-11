@@ -116,3 +116,14 @@ GIF MODAL RETURN — v1.9.19
 GIF DOWNLOAD — v1.9.20
 ----------------------
 - Download GIF now bypasses the mobile native-share helper and directly downloads the rendered .gif.
+
+
+MAIN SAVE DOWNLOAD — v1.9.32
+----------------------------
+- Main-screen Save image now performs a direct PNG download on mobile instead of invoking the native share sheet.
+- Sharing remains available only through the explicit Share button in the Finish dialog.
+
+
+
+ECHO VISIBILITY — v1.9.33
+- Echo now renders three delayed, progressively offset and faded copies so the effect is visibly distinct instead of repainting directly over the source mark.
