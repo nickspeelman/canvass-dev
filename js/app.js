@@ -475,7 +475,57 @@
     effectsCount.textContent = String(Object.values(app.state.behaviors).filter(Boolean).length);
   }
 
-  function setBehavior(key, enabled, shouldRecord = true) {
+  const BRUSH_STATE_KEY = 'touch-instrument-brush-state-v1';
+
+  function saveBrushState() {
+    try {
+      localStorage.setItem(BRUSH_STATE_KEY, JSON.stringify({
+        color: app.state.color,
+        size: app.state.size,
+        behaviors: { ...app.state.behaviors }
+      }));
+    } catch (_) {}
+  }
+
+  function restoreBrushState() {
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem(BRUSH_STATE_KEY) || 'null'); } catch (_) { return; }
+    if (!saved || typeof saved !== 'object') return;
+
+    if (typeof saved.color === 'string' && parseCssColor(saved.color)) {
+      const color = parseCssColor(saved.color);
+      app.state.color = color;
+      document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
+      const preset = [...document.querySelectorAll('.swatch[data-color]')].find(b => (parseCssColor(b.dataset.color) || b.dataset.color) === color);
+      if (preset) {
+        preset.classList.add('active');
+        preset.setAttribute('aria-pressed', 'true');
+      } else {
+        customColorBtn.classList.add('active');
+        customColorBtn.setAttribute('aria-pressed', 'true');
+        setCustomColor(color, false);
+      }
+    }
+
+    const size = Number(saved.size);
+    if (Number.isFinite(size) && document.querySelector(`.size[data-size="${size}"]`)) {
+      app.state.size = size;
+      document.querySelectorAll('.size').forEach(b => {
+        const active = Number(b.dataset.size) === size;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-pressed', String(active));
+      });
+    }
+
+    if (saved.behaviors && typeof saved.behaviors === 'object') {
+      Object.keys(app.state.behaviors).forEach(key => {
+        if (typeof saved.behaviors[key] === 'boolean') setBehavior(key, saved.behaviors[key], false, false);
+      });
+    }
+    updateEffectsCount();
+  }
+
+  function setBehavior(key, enabled, shouldRecord = true, shouldSave = true) {
     app.state.behaviors[key] = enabled;
     const btn = document.querySelector(`.behavior[data-behavior="${key}"]`);
     if (btn) {
@@ -484,6 +534,7 @@
     }
     if (shouldRecord) record('behavior', { behavior: key, enabled });
     updateEffectsCount();
+    if (shouldSave) saveBrushState();
   }
 
   function getControlsHeight() {
@@ -559,13 +610,15 @@
   });
 
   document.getElementById('selectAllEffectsBtn').addEventListener('click', () => {
-    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, true, false));
+    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, true, false, false));
     record('behavior-all', { enabled: true });
+    saveBrushState();
   });
 
   document.getElementById('clearAllEffectsBtn').addEventListener('click', () => {
-    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, false, false));
+    Object.keys(app.state.behaviors).forEach(key => setBehavior(key, false, false, false));
     record('behavior-all', { enabled: false });
+    saveBrushState();
   });
 
   function activateColorButton(btn, color) {
@@ -574,6 +627,7 @@
     btn.setAttribute('aria-pressed', 'true');
     app.state.color = color;
     record('color', { color });
+    saveBrushState();
   }
 
   document.querySelectorAll('.swatch[data-color]').forEach(btn => {
@@ -740,8 +794,11 @@
       btn.classList.add('active'); btn.setAttribute('aria-pressed', 'true');
       app.state.size = Number(btn.dataset.size);
       record('size', { size: app.state.size });
+      saveBrushState();
     });
   });
+
+  restoreBrushState();
 
   const gifRenderBtn = document.getElementById('gifRenderBtn');
   let gifOpenedFromFinish = false;
@@ -1302,7 +1359,7 @@
   window.addEventListener('resize', scheduleResize);
   window.visualViewport?.addEventListener('resize', scheduleResize);
   window.addEventListener('orientationchange', scheduleResize);
-  window.addEventListener('beforeunload', saveDrawing);
+  window.addEventListener('beforeunload', () => { saveDrawing(); saveBrushState(); });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { saveDrawing(); return; }
     app.activeTouches.clear();

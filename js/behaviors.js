@@ -84,9 +84,9 @@
   }
 
   window.TouchBehaviors = {
-    echoDelays: [500, 800, 1200],
-    echoOffsets: [3, 6, 9],
-    echoAlphas: [0.5, 0.3, 0.15],
+    echoDelays: [260, 620, 1120],
+    echoOffsets: [5, 10, 16],
+    echoAlphas: [0.58, 0.36, 0.20],
     radialCopies: 6,
 
     resolveColor(app, snapshotColor = null) {
@@ -141,7 +141,7 @@
       if (!app.state.behaviors.echo || mark.noEcho) return;
       const now = app.clockNow ? app.clockNow() : performance.now();
       this.echoDelays.forEach((delay, index) => {
-        const offset = this.echoOffsets[index] ?? (7 * (index + 1));
+        const offset = this.echoOffsets[index] ?? (5 * (index + 1));
         const alpha = (mark.alpha ?? 1) * (this.echoAlphas[index] ?? 0.25);
         const echoed = { ...mark, echoed: true, noEcho: true, alpha };
         if (echoed.type === 'line') {

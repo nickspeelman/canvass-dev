@@ -127,3 +127,13 @@ MAIN SAVE DOWNLOAD — v1.9.32
 
 ECHO VISIBILITY — v1.9.33
 - Echo now renders three delayed, progressively offset and faded copies so the effect is visibly distinct instead of repainting directly over the source mark.
+
+ECHO TIGHTENING — v1.9.34
+- Reduced Echo offsets from 7/14/22 px to 5/10/16 px so delayed copies sit closer to the source stroke while remaining visibly distinct.
+
+
+BRUSH STATE PERSISTENCE — v1.9.35
+---------------------------------
+- Selected ink/color, brush size, and enabled effects are saved locally.
+- Refreshing/reopening restores the previous brush setup alongside the saved canvas.
+- Clearing or starting a new canvas does not reset the saved brush setup.
