@@ -4,16 +4,15 @@
   // Checkpoint 4.5: engine-level safety governor. These limits are deliberately
   // high enough to leave ordinary drawings untouched while preventing
   // multiplicative effect stacks from producing unbounded work.
-  const SAFETY_LIMITS = {
-    maxActiveParticles: 800,
-    maxPipelineWorkItems: 1024,
-    maxDeferredPaintCallsPerStep: 800,
-    maxDeferredRenderedMarksPerStep: 4000,
-
-    maxQueuedEchoes: 800,
-    maxEchoPaintCallsPerStep: 240,
-    maxEchoRenderedMarksPerStep: 4000
-  };
+  const SAFETY_LIMITS = Object.freeze({
+    maxActiveParticles: 480,
+    maxPipelineWorkItems: 512,
+    maxDeferredPaintCallsPerStep: 480,
+    maxDeferredRenderedMarksPerStep: 2400,
+    maxQueuedEchoes: 480,
+    maxEchoPaintCallsPerStep: 160,
+    maxEchoRenderedMarksPerStep: 2400
+  });
 
   function safetyStats(app) {
     if (!app._safetyStats) {
@@ -204,7 +203,7 @@
           const connector = {
             type: 'line', x1: point.x, y1: point.y, x2: other.x, y2: other.y,
             width: Math.max(2, app.state.size * 0.58),
-            color: app.state.behaviors.cycle ? null : app.state.color
+            color: app.state.ink.type === 'cycle' ? null : app.state.ink.color
           };
           this.advanceHue(app, Math.hypot(point.x - other.x, point.y - other.y), 0.05);
           generated.push({ ...work, mark: connector, pipelineGroup: {} });
@@ -229,7 +228,7 @@
           this.advanceHue(app, 0.7, 0.08);
           const dab = { type:'dab', x:cx+Math.cos(a)*r, y:cy+Math.sin(a)*r,
             width: Math.max(1.2, app.state.size*(0.08+(app.random ? app.random() : Math.random())*0.13)),
-            color: app.state.behaviors.cycle ? null : app.state.color, alpha:0.22+(app.random ? app.random() : Math.random())*0.34 };
+            color: app.state.ink.type === 'cycle' ? null : app.state.ink.color, alpha:0.22+(app.random ? app.random() : Math.random())*0.34 };
           generated.push({ ...work, mark: dab, pipelineGroup: {} });
         }
         return generated;
@@ -247,7 +246,7 @@
           const phase=Math.PI/2+app.orbitPhase;
           const a=rotatePoint(work.mark.x1,work.mark.y1,other.x,other.y,phase), b=rotatePoint(work.mark.x2,work.mark.y2,other.x,other.y,phase);
           this.advanceHue(app,distance,0.22);
-          const orbital = {type:'line',x1:a.x,y1:a.y,x2:b.x,y2:b.y,width:Math.max(2,app.state.size*0.72),color:app.state.behaviors.cycle?null:app.state.color};
+          const orbital = {type:'line',x1:a.x,y1:a.y,x2:b.x,y2:b.y,width:Math.max(2,app.state.size*0.72),color:app.state.ink.type === 'cycle'?null:app.state.ink.color};
           generated.push({ ...work, mark: orbital, pipelineGroup: {} });
           if (generated.length >= maxGenerated) break;
         }
@@ -274,7 +273,6 @@
   const ECHO_ALPHAS = Object.freeze([0.58, 0.36, 0.20]);
 
   function queueEchoes(app, mark, resumeAtEffectIndex, pipelineContext) {
-    if (mark.noEcho) return;
     const now = app.clockNow ? app.clockNow() : performance.now();
     for (let index = 0; index < ECHO_DELAYS.length; index++) {
       if (app.echoQueue.length >= SAFETY_LIMITS.maxQueuedEchoes) {
@@ -284,7 +282,6 @@
       const offset = ECHO_OFFSETS[index] ?? (5 * (index + 1));
       const alpha = (mark.alpha ?? 1) * (ECHO_ALPHAS[index] ?? 0.25);
       const echoed = { ...mark, echoed: true, alpha };
-      delete echoed.noEcho;
       if (echoed.type === 'line') {
         echoed.x1 += offset; echoed.y1 += offset;
         echoed.x2 += offset; echoed.y2 += offset;
@@ -324,7 +321,7 @@
             x, y, vx: Math.cos(angle) * kick, vy: Math.sin(angle) * kick,
             life: 0.5 + randomValue(app) * 1.1, age: 0,
             radius: Math.max(1.2, app.state.size * (0.10 + randomValue(app) * 0.12)),
-            color: app.state.behaviors.cycle ? null : app.state.color,
+            color: app.state.ink.type === 'cycle' ? null : app.state.ink.color,
             lastX: x, lastY: y, kind: 'scatter',
             resumeAtEffectIndex: effectIndex + 1,
             pipelineContext: particleResumeContext(work)
@@ -345,7 +342,7 @@
         addParticle(app, {
           x, y, vx: 0, vy: 0, life: 0.75 + randomValue(app) * 0.8, age: 0,
           radius: Math.max(8, app.state.size * (0.75 + randomValue(app) * 0.8)),
-          color: app.state.behaviors.cycle ? null : app.state.color,
+          color: app.state.ink.type === 'cycle' ? null : app.state.ink.color,
           lastX: x, lastY: y, kind: 'bloom', seed: randomValue(app) * 1000,
           resumeAtEffectIndex: effectIndex + 1,
           pipelineContext: particleResumeContext(work)
@@ -365,7 +362,7 @@
           x: work.mark.x2, y: work.mark.y2, vx: dx / mag * speed, vy: dy / mag * speed,
           life: 0.9 + Math.min(1.4, distance / 35), age: 0,
           radius: Math.max(1.5, app.state.size * 0.33),
-          color: app.state.behaviors.cycle ? null : app.state.color,
+          color: app.state.ink.type === 'cycle' ? null : app.state.ink.color,
           lastX: work.mark.x2, lastY: work.mark.y2, kind: 'drift',
           resumeAtEffectIndex: effectIndex + 1,
           pipelineContext: particleResumeContext(work)
@@ -376,7 +373,7 @@
       defer(app, work, effectIndex) {
         const mark = work.mark;
         if (mark.noBleed || app.particles.length >= SAFETY_LIMITS.maxActiveParticles) return;
-        const baseColor = app.state.behaviors.cycle ? null : (mark.color || app.state.color);
+        const baseColor = app.state.ink.type === 'cycle' ? null : (mark.color || app.state.ink.color);
         const resumeAtEffectIndex = effectIndex + 1;
         const pipelineContext = particleResumeContext(work);
         if (mark.type === 'line') {
@@ -427,13 +424,19 @@
     echoAlphas: ECHO_ALPHAS,
     radialCopies: 6,
 
+    // Intentional emergent behavior: marks that carry a concrete snapshotColor
+    // keep it, but deferred/generated marks whose color is null resolve against
+    // the CURRENT ink when they are finally emitted/rendered. Changing inks
+    // while paint is still settling can therefore recolor the remaining motion.
+    // Preserve this unless/until Canvas gains an explicit color-at-gesture vs
+    // color-at-render-time control.
     resolveColor(app, snapshotColor = null) {
-      if (app.state.behaviors.cycle) return `hsl(${app.state.hue % 360} 92% 50%)`;
-      return snapshotColor || app.state.color;
+      if (app.state.ink.type === 'cycle') return `hsl(${app.state.hue % 360} 92% 50%)`;
+      return snapshotColor || app.state.ink.color;
     },
 
     advanceHue(app, distance, multiplier = 1) {
-      if (!app.state.behaviors.cycle) return;
+      if (app.state.ink.type !== 'cycle') return;
       app.state.hue = (app.state.hue + Math.max(0.8, distance * 0.38) * multiplier) % 360;
     },
 
@@ -450,7 +453,7 @@
       for (let effectIndex = options.startAtEffectIndex || 0; effectIndex < stack.length; effectIndex++) {
         const effectId = stack[effectIndex];
         const effect = effectRegistry[effectId];
-        if (!effect || (effectId === 'echo' && options.allowEcho === false)) continue;
+        if (!effect) continue;
 
         if (effect.transform) {
           // Preserve the legacy per-paint-call batching semantics. Immediate
@@ -490,19 +493,6 @@
       return workItems;
     },
 
-    transformMarks(app, mark) {
-      // Compatibility helper used by tests/older callers. Immediate generators
-      // require pipelineContext and therefore remain inert here.
-      return this.processEffectStack(app, mark, { allowEcho: false }).map(work => work.mark);
-    },
-
-    scheduleEchoes(app, mark, resumeAtEffectIndex = 0, pipelineContext = null) {
-      // Compatibility helper. The ordered registry now schedules Echo at its
-      // actual stack position; older/debug callers may still invoke this.
-      if (!app.state.behaviors.echo) return;
-      queueEchoes(app, mark, resumeAtEffectIndex, pipelineContext);
-    },
-
     processEchoQueue(app, now) {
       if (!app.echoQueue.length) return;
       const remain = [];
@@ -518,50 +508,14 @@
           continue;
         }
         const mark = { ...item.mark };
-        if (app.state.behaviors.cycle) mark.color = null;
+        if (app.state.ink.type === 'cycle') mark.color = null;
         const context = { ...(item.pipelineContext || {}), workItemLimit: renderedMarksLeft };
         paintCallsLeft--;
-        const rendered = app.paintMark(mark, true, context, item.resumeAtEffectIndex || 0) || 0;
+        const rendered = app.paintMark(mark, context, item.resumeAtEffectIndex || 0) || 0;
         renderedMarksLeft = Math.max(0, renderedMarksLeft - rendered);
         this.advanceHue(app, 7, 0.5);
       }
       app.echoQueue = remain;
-    },
-
-    // Checkpoint 4 compatibility wrappers. The live and replay engines no
-    // longer call these directly; deferred effects are spawned by the ordered
-    // registry above. They remain temporarily for older/debug callers.
-    addBleedFromMark(app, mark) {
-      const index = app.state.effectStack.indexOf('bleed');
-      if (index < 0) return;
-      deferredGenerators.bleed.defer.call(this, app, { mark, pipelineContext: null }, index);
-    },
-
-    scatterFromSegment(app, touch, distance) {
-      const index = app.state.effectStack.indexOf('scatter');
-      if (index < 0 || distance < 0.5) return;
-      deferredGenerators.scatter.defer.call(this, app, {
-        mark: { type:'line', x1:touch.px, y1:touch.py, x2:touch.x, y2:touch.y },
-        pipelineContext: { speed: touch.speed || 0, touchId: touch.id, gesturePhase: 'move', allowDeferredGenerators: true }
-      }, index);
-    },
-
-    bloomFromSegment(app, touch, distance) {
-      const index = app.state.effectStack.indexOf('bloom');
-      if (index < 0 || distance < 1.4) return;
-      deferredGenerators.bloom.defer.call(this, app, {
-        mark: { type:'line', x1:touch.px, y1:touch.py, x2:touch.x, y2:touch.y },
-        pipelineContext: { speed: touch.speed || 0, touchId: touch.id, gesturePhase: 'move', allowDeferredGenerators: true }
-      }, index);
-    },
-
-    driftFromSegment(app, touch, distance) {
-      const index = app.state.effectStack.indexOf('drift');
-      if (index < 0 || distance < 0.5) return;
-      deferredGenerators.drift.defer.call(this, app, {
-        mark: { type:'line', x1:touch.px, y1:touch.py, x2:touch.x, y2:touch.y },
-        pipelineContext: { speed: touch.speed || 0, touchId: touch.id, gesturePhase: 'move', allowDeferredGenerators: true }
-      }, index);
     },
 
     updateParticles(app, dt) {
@@ -578,7 +532,7 @@
         }
         const context = { ...(p.pipelineContext || {}), workItemLimit: renderedMarksLeft };
         paintCallsLeft--;
-        const rendered = app.paintMark(mark, true, context, p.resumeAtEffectIndex || 0) || 0;
+        const rendered = app.paintMark(mark, context, p.resumeAtEffectIndex || 0) || 0;
         renderedMarksLeft = Math.max(0, renderedMarksLeft - rendered);
         return true;
       };

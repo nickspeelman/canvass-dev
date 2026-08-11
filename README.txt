@@ -137,3 +137,17 @@ BRUSH STATE PERSISTENCE — v1.9.35
 - Selected ink/color, brush size, and enabled effects are saved locally.
 - Refreshing/reopening restores the previous brush setup alongside the saved canvas.
 - Clearing or starting a new canvas does not reset the saved brush setup.
+
+CANVAS v2 — PHASE 1 ENGINE (Checkpoint 6)
+-----------------------------------------
+- Cycle is now an ink internally rather than a paint effect.
+- Active paint effects are represented canonically as an ordered effectStack.
+- All existing effects execute through a centralized ordered registry/pipeline.
+- Immediate and deferred/generated marks resume through the effects that follow their source effect, so effect order can change the result.
+- Echo queues its resumeAtEffectIndex and resumes downstream when each delayed copy fires; it does not restart the stack.
+- Live drawing and GIF replay use the same effect pipeline, particle updater, Echo queue processor, safety governor, and deterministic session clock/randomness.
+- Legacy Boolean behavior state is retained only at persistence/session compatibility boundaries so older saved brush state and recordings remain readable.
+
+INTENTIONAL LIVE-INK SETTLING BEHAVIOR
+--------------------------------------
+Some deferred/generated marks intentionally resolve their ink color when they are emitted/rendered rather than permanently freezing a color at the original gesture. As a result, changing inks while paint is still spreading, bleeding, drifting, blooming, echoing, or otherwise settling can change the color of the remaining motion. This began as an emergent behavior and is now intentionally preserved. Do not normalize all deferred marks to gesture-time color unless Canvas later introduces an explicit choice between gesture-time and render-time color semantics.

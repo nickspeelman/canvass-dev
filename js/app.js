@@ -37,14 +37,13 @@
 
   const app = {
     state: {
-      // v2 canonical brush state. `color` and `behaviors` remain as temporary
-      // compatibility mirrors until the rendering engine moves to the pipeline.
+      // v2 canonical brush state. Cycle is an ink; paint effects live only in
+      // the ordered effectStack. Legacy Boolean behavior state is generated
+      // only when importing/exporting older sessions.
       ink: { type: 'solid', color: '#e53935' },
       effectStack: [],
-      color: '#e53935',
       size: 16,
-      hue: 0,
-      behaviors: makeBehaviorCompat()
+      hue: 0
     },
     canvasSpec: { mode: 'responsive', width: null, height: null },
     activeTouches: new Map(),
@@ -61,8 +60,8 @@
     random: Math.random,
     clockNow: () => performance.now() - sessionPerfStart,
 
-    paintMark(mark, allowEcho = true, pipelineContext = null, startAtEffectIndex = 0) {
-      const workItems = B.processEffectStack(this, mark, { allowEcho, pipelineContext, startAtEffectIndex });
+    paintMark(mark, pipelineContext = null, startAtEffectIndex = 0) {
+      const workItems = B.processEffectStack(this, mark, { pipelineContext, startAtEffectIndex });
       for (const work of workItems) drawMark(artwork, work.mark, this);
       this.dirty = true;
       return workItems.length;
@@ -75,7 +74,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 3,
-      engineVersion: '2.0.0-cp5',
+      engineVersion: '2.0.0-cp6',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -90,10 +89,11 @@
       effects: [...app.state.effectStack],
       effectStack: [...app.state.effectStack],
       size: app.state.size,
-      // Compatibility fields keep existing replay/render code and exported
-      // sessions readable while v2 moves fully onto ink + effectStack.
-      color: app.state.color,
-      behaviors: { ...app.state.behaviors },
+      // Compatibility fields remain in exported sessions so older Canvas
+      // builds can still understand the brush state. They are derived here;
+      // the live engine no longer stores the legacy Boolean behavior model.
+      color: app.state.ink.color,
+      behaviors: behaviorCompatSnapshot(app.state),
       canvas: { ...app.canvasSpec }
     };
   }
@@ -376,7 +376,7 @@
     app.activeTouches.set(e.pointerId, touch);
     hint.classList.add('hidden');
 
-    const dab = { type: 'dab', x: p.x, y: p.y, width: app.state.size, color: app.state.behaviors.cycle ? null : app.state.color };
+    const dab = { type: 'dab', x: p.x, y: p.y, width: app.state.size, color: app.state.ink.type === 'cycle' ? null : app.state.ink.color };
     B.advanceHue(app, 2);
     app.paintMark(dab);
     record('down', { id: e.pointerId, ...normalizedPoint(p.x, p.y) });
@@ -399,9 +399,9 @@
       B.advanceHue(app, distance);
       const mark = {
         type: 'line', x1: t.px, y1: t.py, x2: t.x, y2: t.y,
-        width: app.state.size, color: app.state.behaviors.cycle ? null : app.state.color
+        width: app.state.size, color: app.state.ink.type === 'cycle' ? null : app.state.ink.color
       };
-      app.paintMark(mark, true, { allowImmediateGenerators: true, allowDeferredGenerators: true, touchId: t.id, gesturePhase: 'move', speed: t.speed });
+      app.paintMark(mark, { allowImmediateGenerators: true, allowDeferredGenerators: true, touchId: t.id, gesturePhase: 'move', speed: t.speed });
       record('move', { id: e.pointerId, ...normalizedPoint(t.x, t.y) });
       saveSoon();
     }
@@ -435,12 +435,12 @@
     }
   }
 
-  function processEchoes(now) { B.processEchoQueue(app, now); }
+  function processEchoes() { B.processEchoQueue(app, app.clockNow()); }
 
   function frame(now) {
     const dt = Math.min(0.05, (now - app.lastFrame) / 1000);
     app.lastFrame = now;
-    processEchoes(now);
+    processEchoes();
     B.updateParticles(app, dt);
     if (app.dirty) { syncVisibleCanvas(); app.dirty = false; }
     renderLive();
@@ -488,20 +488,22 @@
     return LEGACY_EFFECT_ORDER.filter(id => requested.has(id));
   }
 
-  function syncBehaviorCompat() {
-    const enabled = new Set(app.state.effectStack);
+  function behaviorCompatSnapshot(state) {
+    const enabled = new Set(state.effectStack || []);
     const compat = makeBehaviorCompat();
-    compat.cycle = app.state.ink.type === 'cycle';
+    compat.cycle = state.ink?.type === 'cycle';
     for (const id of LEGACY_EFFECT_ORDER) compat[id] = enabled.has(id);
-    app.state.behaviors = compat;
-    app.state.color = app.state.ink.color || app.state.color || '#e53935';
+    return compat;
+  }
+
+  function isBehaviorEnabled(id) {
+    return id === 'cycle' ? app.state.ink.type === 'cycle' : app.state.effectStack.includes(id);
   }
 
   function setInk(ink, shouldRecord = true, shouldSave = true) {
     const type = ink?.type === 'cycle' ? 'cycle' : 'solid';
-    const color = parseCssColor(ink?.color || app.state.ink?.color || app.state.color || '#e53935') || '#e53935';
+    const color = parseCssColor(ink?.color || app.state.ink?.color || '#e53935') || '#e53935';
     app.state.ink = { type, color };
-    syncBehaviorCompat();
 
     const cycleBtn = document.querySelector('.behavior[data-behavior="cycle"]');
     if (cycleBtn) {
@@ -516,7 +518,6 @@
 
   function setEffectStack(nextStack, shouldRecord = true, shouldSave = true, metadata = {}) {
     app.state.effectStack = normalizeEffectStack(nextStack);
-    syncBehaviorCompat();
     const enabled = new Set(app.state.effectStack);
     document.querySelectorAll('.behavior[data-behavior]').forEach(btn => {
       const id = btn.dataset.behavior;
@@ -681,7 +682,7 @@
   }
 
   document.querySelectorAll('.behavior').forEach(btn => {
-    btn.addEventListener('click', () => setBehavior(btn.dataset.behavior, !app.state.behaviors[btn.dataset.behavior]));
+    btn.addEventListener('click', () => setBehavior(btn.dataset.behavior, !isBehaviorEnabled(btn.dataset.behavior)));
   });
 
   document.getElementById('selectAllEffectsBtn').addEventListener('click', () => {
@@ -704,9 +705,7 @@
     document.querySelectorAll('.swatch').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
     btn.classList.add('active');
     btn.setAttribute('aria-pressed', 'true');
-    app.state.color = color;
     app.state.ink = { ...app.state.ink, color };
-    syncBehaviorCompat();
     record('color', { color });
     saveBrushState();
   }
@@ -945,8 +944,8 @@
       state: cloneState(config), cssWidth: logicalWidth, cssHeight: logicalHeight,
       activeTouches: new Map(), particles: [], echoQueue: [], orbitPhase: 0,
       now: 0, random: makeRandom(randomSeed ?? session.randomSeed ?? 1), clockNow: () => replay.now,
-      paintMark(mark, allowEcho = true, pipelineContext = null, startAtEffectIndex = 0) {
-        const workItems = B.processEffectStack(this, mark, { allowEcho, pipelineContext, startAtEffectIndex });
+      paintMark(mark, pipelineContext = null, startAtEffectIndex = 0) {
+        const workItems = B.processEffectStack(this, mark, { pipelineContext, startAtEffectIndex });
         for (const work of workItems) drawMark(ctx, work.mark, this);
         return workItems.length;
       }
@@ -996,7 +995,7 @@
       const touch = { id:event.id, x,y,px:x,py:y,time:replay.now,ptime:replay.now,speed:0 };
       replay.activeTouches.set(event.id, touch);
       B.advanceHue(replay, 2);
-      replay.paintMark({ type:'dab', x,y, width:replay.state.size, color:replay.state.behaviors.cycle ? null : replay.state.color });
+      replay.paintMark({ type:'dab', x,y, width:replay.state.size, color:replay.state.ink.type === 'cycle' ? null : replay.state.ink.color });
       return;
     }
     const t = replay.activeTouches.get(event.id);
@@ -1006,7 +1005,7 @@
     const distance=Math.hypot(t.x-t.px,t.y-t.py), dt=Math.max(1,t.time-t.ptime); t.speed=distance/dt*1000;
     if (distance <= 0.15) return;
     B.advanceHue(replay,distance);
-    replay.paintMark({type:'line',x1:t.px,y1:t.py,x2:t.x,y2:t.y,width:replay.state.size,color:replay.state.behaviors.cycle?null:replay.state.color}, true, { allowImmediateGenerators: true, allowDeferredGenerators: true, touchId: t.id, gesturePhase: 'move', speed: t.speed });
+    replay.paintMark({type:'line',x1:t.px,y1:t.py,x2:t.x,y2:t.y,width:replay.state.size,color:replay.state.ink.type==='cycle'?null:replay.state.ink.color}, { allowImmediateGenerators: true, allowDeferredGenerators: true, touchId: t.id, gesturePhase: 'move', speed: t.speed });
   }
 
   function stateAtEventIndex(events, endIndex) {
