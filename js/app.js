@@ -1429,7 +1429,7 @@
       if (clearEvent.canvas?.width && clearEvent.canvas?.height) replayCanvas = clearEvent.canvas;
     } else {
       const firstDownIndex = events.findIndex(e => e.type === 'down');
-      if (firstDownIndex < 0) { alert('Make some marks before rendering a performance GIF.'); return; }
+      if (firstDownIndex < 0) { alert('Make some marks before rendering the recording as a GIF.'); return; }
       startIndex = firstDownIndex;
       boundaryTime = events[firstDownIndex].t;
       initialState = stateAtEventIndex(events, firstDownIndex);
@@ -1439,11 +1439,11 @@
     const postBoundaryEvents = events.slice(startIndex);
     const artistic = postBoundaryEvents.filter(e => artisticTypes.has(e.type));
     const firstDown = artistic.find(e => e.type === 'down');
-    if (!firstDown) { alert('Make some marks after the most recent Clear before rendering a performance GIF.'); return; }
+    if (!firstDown) { alert('Make some marks after the most recent Clear before rendering the recording as a GIF.'); return; }
 
     clearGifResult(); gifResult.rendering = true; gifResult.cancelled = false; gifRenderBtn.disabled = true;
     analyticsEvent('gif_render_started');
-    gifRenderBtn.textContent = 'Rendering…'; gifRenderStatus.hidden = false; gifRenderStatus.textContent = 'Replaying performance…';
+    gifRenderBtn.textContent = 'Rendering…'; gifRenderStatus.hidden = false; gifRenderStatus.textContent = 'Replaying recording…';
     gifProgressBar.style.width = '0%'; gifDialog.showModal();
 
     const sourceEvents = postBoundaryEvents.map(e => ({...e, t:Math.max(0,e.t-boundaryTime)}));
@@ -1486,7 +1486,7 @@
       const blob=await window.CanvasGifEncoder.encode({width:outW,height:outH,frames,delayMs:frameDelay,repeat:0,shouldCancel:()=>gifResult.cancelled,onProgress:p=>{gifProgressBar.style.width=`${45+Math.round(p*55)}%`; gifRenderStatus.textContent=`Encoding GIF… ${Math.round(p*100)}%`;}});
       gifResult.blob=blob; gifResult.url=URL.createObjectURL(blob); gifPreview.src=gifResult.url; gifPreview.hidden=false;
       gifRenderStatus.hidden=true; gifProgressBar.style.width='100%';
-      gifMeta.textContent=`${formatDuration(duration)} performance • ${frames.length} frames • ${outW} × ${outH} • ${formatBytes(blob.size)}`;
+      gifMeta.textContent=`${formatDuration(duration)} recording • ${frames.length} frames • ${outW} × ${outH} • ${formatBytes(blob.size)}`;
       downloadGifBtn.disabled=false; record('gif-ready',{bytes:blob.size,source:'performance-replay'});
     } catch(error) {
       if (error?.name === 'AbortError' || gifResult.cancelled) return;
@@ -1509,7 +1509,7 @@
   downloadGifBtn.addEventListener('click', () => {
     if (!gifResult.blob) return;
     // "Download GIF" should always perform a browser download, including on mobile.
-    downloadBlob(gifResult.blob, `canvas-performance-${timestampName()}.gif`);
+    downloadBlob(gifResult.blob, `canvas-recording-${timestampName()}.gif`);
     record('download-gif', { bytes: gifResult.blob.size, direct: true });
   });
   document.getElementById('closeGifBtn').addEventListener('click', () => {
@@ -1696,7 +1696,7 @@
 
   document.getElementById('downloadSessionBtn').addEventListener('click', () => {
     const exportSession = { ...app.session, endedAt: new Date().toISOString(), finalState: snapshotState() };
-    downloadBlob(new Blob([JSON.stringify(exportSession, null, 2)], { type: 'application/json' }), `canvas-session-${timestampName()}.json`);
+    downloadBlob(new Blob([JSON.stringify(exportSession, null, 2)], { type: 'application/json' }), `canvas-recording-${timestampName()}.json`);
     record('download-session');
   });
 

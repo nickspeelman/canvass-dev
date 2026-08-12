@@ -9,7 +9,7 @@ BASELINE
 - Small / medium / large brushes
 - Local persistence
 - One-tap Save Image button during drawing
-- Finish dialog with PNG and session JSON export
+- Finish dialog with PNG and recording JSON export
 - Responsive, preset, and custom canvas dimensions
 
 COMPOSABLE BEHAVIORS
@@ -45,7 +45,7 @@ NOTES
 - Flow, Offset, Radial, and Mirror are composable spatial transformations.
 - Bloom and Spray can also be transformed by Flow/Offset/Radial/Mirror because they emit ordinary marks through the same pipeline.
 - Orbit is intentionally multi-touch: it has no effect with a single active touch.
-- All behavior toggles and touch events are recorded in the exported session JSON.
+- All behavior toggles and touch events are recorded in the exported recording JSON.
 
 
 BRANDING + PWA — v1.7
@@ -58,15 +58,15 @@ BRANDING + PWA — v1.7
 - PWA display allows any orientation and respects device safe areas
 
 
-PERFORMANCE GIF — v1.9.1
-- Canvas continuously records a lightweight performance log: timestamped touch/pointer events plus color, brush-size, effect, clear, and canvas-setting changes.
-- Render GIF reconstructs the current performance after the fact; there is no live GIF recording mode.
+RECORDING GIF — v1.9.1
+- Canvas continuously records a lightweight recording log: timestamped touch/pointer events plus color, brush-size, effect, clear, and canvas-setting changes.
+- Render GIF reconstructs the current recording after the fact; there is no live GIF recording mode.
 - Stochastic effects use a session seed, so Scatter, Spray, Bloom, and Bleed make the same random choices during replay.
-- Flow and Echo use the recorded performance clock so their timing is replayable.
-- Rendering is entirely client-side; no artwork or performance data is uploaded.
-- GIF output preserves the performance timing, loops continuously, and is scaled to a maximum dimension of 480 px.
-- Long sessions are automatically sampled to a practical maximum frame count rather than imposing a performance-time limit.
-- Start again begins a new performance/session log. The session JSON download contains the replay data and random seed.
+- Flow and Echo use the recorded clock so their timing is replayable.
+- Rendering is entirely client-side; no artwork or recording data is uploaded.
+- GIF output preserves the recording timing, loops continuously, and is scaled to a maximum dimension of 480 px.
+- Long recordings are automatically sampled to a practical maximum frame count rather than imposing a recording-time limit.
+- Start again begins a new recording. The recording JSON download contains the replay data and random seed.
 
 
 GIF CLEAR BOUNDARY (v1.9.6)
@@ -97,12 +97,12 @@ BRANDING + SEO — v1.9.17
 - Added favicon-48.png reference alongside the existing favicon, Apple touch icon, and Android/PWA icons.
 - Added robots.txt and sitemap.xml.
 - Social preview image expected at assets/icons/canvas-social.png (1200 × 627).
-- Downloaded PNG, GIF, and session JSON filenames now use the canvas- prefix.
+- Downloaded PNG, GIF, and recording JSON filenames now use the canvas- prefix.
 
 
 FINISH ACTIONS — v1.9.18
 ------------------------
-- Finish dialog now includes Render GIF, using the existing performance GIF renderer unchanged.
+- Finish dialog now includes Render recording as GIF, using the existing recording GIF renderer unchanged.
 - Finish dialog now includes Share, which uses the native Web Share API to share the finished PNG where supported.
 - Finish > Download image now performs a direct PNG download on mobile instead of invoking the share sheet.
 
