@@ -75,7 +75,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 4,
-      engineVersion: '2.4.0-cp2.4',
+      engineVersion: '2.4.6-cp2.4.6',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -1017,8 +1017,14 @@
     saveBrushState();
   }
 
+  function clearEffectStack() {
+    setEffectStack([], false, false);
+    record('effect-stack', { effectStack: [], effects: [], enabled: false, stackAction: 'clear' });
+    saveBrushState();
+  }
+
   document.getElementById('clearAllEffectsBtn').addEventListener('click', disableAllEffects);
-  document.getElementById('clearStackBtn')?.addEventListener('click', disableAllEffects);
+  document.getElementById('clearStackBtn')?.addEventListener('click', clearEffectStack);
 
   function activateColorButton(btn, color) {
     const parsed = parseCssColor(color) || color;

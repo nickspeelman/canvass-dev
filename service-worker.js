@@ -1,4 +1,4 @@
-const BASE_VERSION = "1.9.36.5";
+const BASE_VERSION = "1.9.36.6";
 
 // The same service worker is deployed to both production and development.
 // Give dev its own visible version label/cache name automatically so releases
