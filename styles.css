@@ -290,3 +290,27 @@ button { -webkit-tap-highlight-color: transparent; }
 .gif-render-status[hidden] {
   display: none !important;
 }
+
+/* Phase 2 mobile effects-menu sizing: keep the tab bar/top visible and scroll only the active panel. */
+@media (max-width: 820px), (max-height: 700px) {
+  .effects-menu {
+    display: flex;
+    flex-direction: column;
+    max-height: min(74dvh, calc(100dvh - 82px));
+    overflow: hidden;
+  }
+  .effects-tabs {
+    flex: 0 0 auto;
+  }
+  .effects-tab-panel {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .effect-groups,
+  .effect-stack-preview {
+    max-height: none;
+    overflow: visible;
+  }
+}
