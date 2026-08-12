@@ -580,6 +580,7 @@
       row.append(handle, number, label, controls);
       effectStackPreview.appendChild(row);
     });
+    if (!effectsMenu.hidden && !stackTabPanel.hidden) requestAnimationFrame(positionEffectsMenu);
   }
 
   function behaviorCompatSnapshot(state) {
@@ -876,18 +877,38 @@
   function positionEffectsMenu() {
     const mobile = window.matchMedia('(max-width: 820px)').matches;
     if (mobile) {
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      const viewportWidth = window.visualViewport?.width || window.innerWidth;
+      const bottom = Math.ceil(getControlsHeight() + 8);
+      const margin = 8;
+
       effectsMenu.style.position = 'fixed';
       effectsMenu.style.left = '50%';
       effectsMenu.style.right = 'auto';
-      effectsMenu.style.bottom = `${Math.ceil(getControlsHeight() + 8)}px`;
+      effectsMenu.style.bottom = `${bottom}px`;
       effectsMenu.style.width = 'min(620px, calc(100vw - 16px))';
-      effectsMenu.style.transform = 'translateX(-50%)';
+      effectsMenu.style.maxHeight = 'none';
+      effectsMenu.style.overflow = 'visible';
+      effectsMenu.style.transformOrigin = 'bottom center';
+      effectsMenu.style.transform = 'translateX(-50%) scale(1)';
+
+      // Phase 2 mobile UX: keep the entire effects menu visible rather than
+      // introducing an inner scroll area. Measure its natural size, then scale
+      // the whole panel only when the available viewport requires it.
+      const rect = effectsMenu.getBoundingClientRect();
+      const availableHeight = Math.max(1, viewportHeight - bottom - margin);
+      const availableWidth = Math.max(1, viewportWidth - margin * 2);
+      const scale = Math.min(1, availableHeight / Math.max(1, rect.height), availableWidth / Math.max(1, rect.width));
+      effectsMenu.style.transform = `translateX(-50%) scale(${scale})`;
     } else {
       effectsMenu.style.position = '';
       effectsMenu.style.left = '';
       effectsMenu.style.right = '';
       effectsMenu.style.bottom = '';
       effectsMenu.style.width = '';
+      effectsMenu.style.maxHeight = '';
+      effectsMenu.style.overflow = '';
+      effectsMenu.style.transformOrigin = '';
       effectsMenu.style.transform = '';
     }
   }
@@ -926,6 +947,7 @@
     effectsTabPanel.hidden = showStack;
     stackTabPanel.hidden = !showStack;
     if (showStack) renderEffectStackPreview();
+    if (!effectsMenu.hidden) requestAnimationFrame(positionEffectsMenu);
   }
 
   effectsTabBtn.addEventListener('click', () => showEffectsMenuTab('effects'));
@@ -944,11 +966,11 @@
     e.stopPropagation();
     const willOpen = effectsMenu.hidden;
     closePopovers(willOpen ? effectsMenu : null);
+    effectsMenu.hidden = !willOpen;
     if (willOpen) {
       showEffectsMenuTab('effects');
       positionEffectsMenu();
     }
-    effectsMenu.hidden = !willOpen;
     effectsBtn.setAttribute('aria-expanded', String(willOpen));
   });
 
