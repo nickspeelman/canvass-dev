@@ -30,6 +30,9 @@
 
   const LEGACY_EFFECT_ORDER = [...B.legacyEffectOrder];
   const EFFECT_IDS = new Set(LEGACY_EFFECT_ORDER);
+  // Retired from the current UI, but intentionally retained in the engine and
+  // legacy replay path so it can be restored later without breaking sessions.
+  const RETIRED_UI_EFFECT_IDS = new Set(['offset']);
 
   function makeBehaviorCompat() {
     return { cycle: false, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false };
@@ -75,7 +78,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 4,
-      engineVersion: '2.4.6-cp2.4.6',
+      engineVersion: '2.4.8-cp2.4.8',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -714,6 +717,13 @@
       migrated = true;
     }
     if (!restored) return;
+
+    // Current brush state should not surface retired UI effects. This filter is
+    // deliberately applied only during live-state restore; cloneState/replay
+    // continues to accept them for backward-compatible GIF/session rendering.
+    const restoredStackLength = restored.effectStack.length;
+    restored.effectStack = restored.effectStack.filter(entry => !RETIRED_UI_EFFECT_IDS.has(entry.id));
+    if (restored.effectStack.length !== restoredStackLength) migrated = true;
 
     setInk(restored.ink, false, false);
     applyRestoredColorUi(restored.ink.color);

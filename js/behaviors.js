@@ -321,7 +321,7 @@
             x, y, vx: Math.cos(angle) * kick, vy: Math.sin(angle) * kick,
             life: 0.5 + randomValue(app) * 1.1, age: 0,
             radius: Math.max(1.2, app.state.size * (0.10 + randomValue(app) * 0.12)),
-            color: app.state.ink.type === 'cycle' ? null : app.state.ink.color,
+            color: null,
             lastX: x, lastY: y, kind: 'scatter',
             resumeAtEffectIndex: effectIndex + 1,
             pipelineContext: particleResumeContext(work)
@@ -342,7 +342,7 @@
         addParticle(app, {
           x, y, vx: 0, vy: 0, life: 0.75 + randomValue(app) * 0.8, age: 0,
           radius: Math.max(8, app.state.size * (0.75 + randomValue(app) * 0.8)),
-          color: app.state.ink.type === 'cycle' ? null : app.state.ink.color,
+          color: null,
           lastX: x, lastY: y, kind: 'bloom', seed: randomValue(app) * 1000,
           resumeAtEffectIndex: effectIndex + 1,
           pipelineContext: particleResumeContext(work)
@@ -362,7 +362,7 @@
           x: work.mark.x2, y: work.mark.y2, vx: dx / mag * speed, vy: dy / mag * speed,
           life: 0.9 + Math.min(1.4, distance / 35), age: 0,
           radius: Math.max(1.5, app.state.size * 0.33),
-          color: app.state.ink.type === 'cycle' ? null : app.state.ink.color,
+          color: null,
           lastX: work.mark.x2, lastY: work.mark.y2, kind: 'drift',
           resumeAtEffectIndex: effectIndex + 1,
           pipelineContext: particleResumeContext(work)
@@ -373,7 +373,6 @@
       defer(app, work, effectIndex) {
         const mark = work.mark;
         if (mark.noBleed || app.particles.length >= SAFETY_LIMITS.maxActiveParticles) return;
-        const baseColor = app.state.ink.type === 'cycle' ? null : (mark.color || app.state.ink.color);
         const resumeAtEffectIndex = effectIndex + 1;
         const pipelineContext = particleResumeContext(work);
         if (mark.type === 'line') {
@@ -386,7 +385,7 @@
             addParticle(app, {
               x, y, vx: 0, vy: 0, life: 1.15 + randomValue(app) * 1.05, age: 0,
               radius: Math.max(5, (mark.width || app.state.size) * (0.55 + randomValue(app) * 0.35)),
-              color: baseColor, lastX: x, lastY: y, kind: 'bleed', seed: randomValue(app) * 1000,
+              color: null, lastX: x, lastY: y, kind: 'bleed', seed: randomValue(app) * 1000,
               resumeAtEffectIndex, pipelineContext
             });
           }
@@ -394,7 +393,7 @@
           addParticle(app, {
             x: mark.x, y: mark.y, vx: 0, vy: 0, life: 1.25 + randomValue(app) * 1.0, age: 0,
             radius: Math.max(5, (mark.width || app.state.size) * (0.6 + randomValue(app) * 0.35)),
-            color: baseColor, lastX: mark.x, lastY: mark.y, kind: 'bleed', seed: randomValue(app) * 1000,
+            color: null, lastX: mark.x, lastY: mark.y, kind: 'bleed', seed: randomValue(app) * 1000,
             resumeAtEffectIndex, pipelineContext
           });
         }
@@ -424,12 +423,13 @@
     echoAlphas: ECHO_ALPHAS,
     radialCopies: 6,
 
-    // Intentional emergent behavior: marks that carry a concrete snapshotColor
-    // keep it, but deferred/generated marks whose color is null resolve against
-    // the CURRENT ink when they are finally emitted/rendered. Changing inks
-    // while paint is still settling can therefore recolor the remaining motion.
-    // Preserve this unless/until Canvas gains an explicit color-at-gesture vs
-    // color-at-render-time control.
+    // Intentional emergent behavior: the original gesture can carry a concrete
+    // color snapshot, but deferred particle effects (Scatter/Bloom/Drift/Bleed)
+    // deliberately emit marks with color:null. Those marks resolve against the
+    // CURRENT ink when they are emitted/rendered, so changing inks while paint
+    // is still settling recolors the remaining motion. Preserve this unless/
+    // until Canvas gains an explicit color-at-gesture vs color-at-render-time
+    // control.
     resolveColor(app, snapshotColor = null) {
       if (app.state.ink.type === 'cycle') return `hsl(${app.state.hue % 360} 92% 50%)`;
       return snapshotColor || app.state.ink.color;
