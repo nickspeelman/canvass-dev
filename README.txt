@@ -150,4 +150,16 @@ CANVAS v2 — PHASE 1 ENGINE (Checkpoint 6)
 
 INTENTIONAL LIVE-INK SETTLING BEHAVIOR
 --------------------------------------
-Some deferred/generated marks intentionally resolve their ink color when they are emitted/rendered rather than permanently freezing a color at the original gesture. As a result, changing inks while paint is still spreading, bleeding, drifting, blooming, echoing, or otherwise settling can change the color of the remaining motion. This began as an emergent behavior and is now intentionally preserved. Do not normalize all deferred marks to gesture-time color unless Canvas later introduces an explicit choice between gesture-time and render-time color semantics.
+Some deferred/generated particle marks intentionally resolve their ink color when they are emitted/rendered rather than permanently freezing a color at the original gesture. In the current engine this applies to Scatter, Bloom, Drift, and Bleed. As a result, changing inks while those effects are still dispersing/settling changes the color of their remaining motion while already-painted marks keep their original color. This began as an emergent behavior and is now intentionally preserved. Do not normalize these particle marks to gesture-time color unless Canvas later introduces an explicit choice between gesture-time and render-time color semantics.
+
+CANVAS v2 — PHASE 2 ORDERED EFFECTS UI (Checkpoint 2.5)
+---------------------------------------------------------
+- Paint Effects are grouped alphabetically as Generate, Interact, and Transform; effects are alphabetical within each group.
+- Cycle is presented as an ink, not a paint effect.
+- The Stack tab exposes the real ordered pipeline while the Effects tab remains the default quick-toggle surface.
+- New effects append to the stack. Disabling an effect keeps its position; re-enabling restores it in place.
+- Stack rows support drag, up/down controls, and direct disable/re-enable controls.
+- Unselect all disables retained effects without forgetting order. Clear stack empties the stack and disables all effects.
+- Mobile Stack mode keeps tabs/header fixed and scrolls only the ordered row list so touch targets remain usable.
+- Offset is retired from the current UI/state but remains implemented in the engine for legacy session/GIF replay and possible future restoration.
+- Bulk UI actions operate only on currently exposed effects, so retired effects cannot silently return to a new live stack.

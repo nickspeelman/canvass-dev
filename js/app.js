@@ -33,6 +33,11 @@
   // Retired from the current UI, but intentionally retained in the engine and
   // legacy replay path so it can be restored later without breaking sessions.
   const RETIRED_UI_EFFECT_IDS = new Set(['offset']);
+  // Effects currently exposed by the live Canvas UI. Keep this separate from
+  // EFFECT_IDS/LEGACY_EFFECT_ORDER so retired effects remain valid for old
+  // sessions without leaking back into new stacks via bulk UI actions.
+  const CURRENT_UI_EFFECT_ORDER = LEGACY_EFFECT_ORDER.filter(id => !RETIRED_UI_EFFECT_IDS.has(id));
+  const CURRENT_UI_EFFECT_IDS = new Set(CURRENT_UI_EFFECT_ORDER);
 
   function makeBehaviorCompat() {
     return { cycle: false, connect: false, echo: false, scatter: false, flow: false, bloom: false, spray: false, offset: false, mirror: false, radial: false, drift: false, orbit: false, fractal: false, bleed: false };
@@ -78,7 +83,7 @@
     app.session = {
       format: 'touch-instrument-session',
       version: 4,
-      engineVersion: '2.4.8-cp2.4.8',
+      engineVersion: '2.5.0-cp2.5',
       startedAt: new Date().toISOString(),
       randomSeed: app.randomSeed,
       initialCanvas: { width: app.cssWidth, height: app.cssHeight, spec: { ...app.canvasSpec } },
@@ -461,6 +466,7 @@
   const effectsTabPanel = document.getElementById('effectsTabPanel');
   const stackTabPanel = document.getElementById('stackTabPanel');
   const effectStackPreview = document.getElementById('effectStackPreview');
+  const clearStackBtn = document.getElementById('clearStackBtn');
   const cycleInkBtn = document.getElementById('cycleInkBtn');
   const customColorBtn = document.getElementById('customColorBtn');
   const colorMenu = document.getElementById('colorMenu');
@@ -512,6 +518,7 @@
   function renderEffectStackPreview() {
     if (!effectStackPreview) return;
     const stack = normalizeEffectStack(app.state.effectStack);
+    if (clearStackBtn) clearStackBtn.disabled = stack.length === 0;
     effectStackPreview.replaceChildren();
     if (!stack.length) {
       const empty = document.createElement('p');
@@ -742,7 +749,7 @@
   }
 
   function setBehavior(key, enabled, shouldRecord = true, shouldSave = true) {
-    if (!EFFECT_IDS.has(key)) return;
+    if (!CURRENT_UI_EFFECT_IDS.has(key)) return;
 
     const next = cloneEffectStack(app.state.effectStack);
     const existing = next.find(entry => entry.id === key);
@@ -1014,7 +1021,7 @@
     const next = cloneEffectStack(app.state.effectStack);
     const present = new Set(next.map(entry => entry.id));
     for (const entry of next) entry.enabled = true;
-    for (const id of LEGACY_EFFECT_ORDER) if (!present.has(id)) next.push({ id, enabled: true });
+    for (const id of CURRENT_UI_EFFECT_ORDER) if (!present.has(id)) next.push({ id, enabled: true });
     setEffectStack(next, false, false);
     record('effect-stack', { effectStack: cloneEffectStack(app.state.effectStack), effects: enabledEffectIds(app.state.effectStack), enabled: true });
     saveBrushState();
@@ -1034,7 +1041,7 @@
   }
 
   document.getElementById('clearAllEffectsBtn').addEventListener('click', disableAllEffects);
-  document.getElementById('clearStackBtn')?.addEventListener('click', clearEffectStack);
+  clearStackBtn?.addEventListener('click', clearEffectStack);
 
   function activateColorButton(btn, color) {
     const parsed = parseCssColor(color) || color;
