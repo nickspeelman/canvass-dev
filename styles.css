@@ -62,7 +62,9 @@ button { -webkit-tap-highlight-color: transparent; }
 .effect-group h3 { margin: 0 0 6px; color: #666; font-size: 11px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
 .behaviors { display: grid; grid-template-columns: repeat(4, minmax(92px, 1fr)); gap: 7px; }
 .stack-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.stack-heading-actions { display: flex; align-items: baseline; gap: 10px; }
 .stack-heading span { color: #777; font-size: 12px; }
+.stack-clear-button { white-space: nowrap; }
 .effect-stack-preview { display: grid; gap: 6px; min-height: 44px; }
 .stack-preview-row { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px 6px 6px; border: 1px solid #d5d5d0; border-radius: 9px; background: #fff; font-weight: 750; transition: border-color .12s ease, box-shadow .12s ease, opacity .12s ease; }
 .stack-preview-row.disabled { background: #f0f0ed; }
@@ -291,7 +293,9 @@ button { -webkit-tap-highlight-color: transparent; }
   display: none !important;
 }
 
-/* Phase 2 mobile effects-menu sizing: the whole popover is scaled by JS to fit the viewport. */
+/* Phase 2 mobile effects-menu sizing.
+   Effects stays a compact palette and is scaled by JS when needed.
+   Stack uses full-size touch rows; only the ordered row list scrolls. */
 @media (max-width: 820px), (max-height: 700px) {
   .effects-menu {
     max-height: none;
@@ -302,5 +306,35 @@ button { -webkit-tap-highlight-color: transparent; }
   .effect-stack-preview {
     max-height: none;
     overflow: visible;
+  }
+
+  .effects-menu.mobile-stack-mode {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .effects-menu.mobile-stack-mode .effects-tabs {
+    flex: 0 0 auto;
+  }
+  .effects-menu.mobile-stack-mode #stackTabPanel {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .effects-menu.mobile-stack-mode .stack-heading,
+  .effects-menu.mobile-stack-mode .stack-note {
+    flex: 0 0 auto;
+  }
+  .effects-menu.mobile-stack-mode .effect-stack-preview {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 2px;
   }
 }

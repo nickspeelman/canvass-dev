@@ -166,7 +166,10 @@
             <div id="stackTabPanel" class="effects-tab-panel" role="tabpanel" aria-labelledby="stackTabBtn" hidden>
               <div class="stack-heading">
                 <strong>Effect Order</strong>
-                <span>Runs top → bottom</span>
+                <div class="stack-heading-actions">
+                  <span>Runs top → bottom</span>
+                  <button id="clearStackBtn" type="button" class="text-button stack-clear-button">Clear stack</button>
+                </div>
               </div>
               <div id="effectStackPreview" class="effect-stack-preview" aria-live="polite"></div>
               <p class="stack-note">Drag by the handle or use the arrows to reorder. Use × to disable and + to re-enable.</p>

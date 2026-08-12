@@ -881,26 +881,38 @@
       const viewportWidth = window.visualViewport?.width || window.innerWidth;
       const bottom = Math.ceil(getControlsHeight() + 8);
       const margin = 8;
+      const availableHeight = Math.max(1, viewportHeight - bottom - margin);
+      const availableWidth = Math.max(1, viewportWidth - margin * 2);
+      const showStack = !stackTabPanel.hidden;
 
       effectsMenu.style.position = 'fixed';
       effectsMenu.style.left = '50%';
       effectsMenu.style.right = 'auto';
       effectsMenu.style.bottom = `${bottom}px`;
       effectsMenu.style.width = 'min(620px, calc(100vw - 16px))';
-      effectsMenu.style.maxHeight = 'none';
-      effectsMenu.style.overflow = 'visible';
       effectsMenu.style.transformOrigin = 'bottom center';
-      effectsMenu.style.transform = 'translateX(-50%) scale(1)';
 
-      // Phase 2 mobile UX: keep the entire effects menu visible rather than
-      // introducing an inner scroll area. Measure its natural size, then scale
-      // the whole panel only when the available viewport requires it.
-      const rect = effectsMenu.getBoundingClientRect();
-      const availableHeight = Math.max(1, viewportHeight - bottom - margin);
-      const availableWidth = Math.max(1, viewportWidth - margin * 2);
-      const scale = Math.min(1, availableHeight / Math.max(1, rect.height), availableWidth / Math.max(1, rect.width));
-      effectsMenu.style.transform = `translateX(-50%) scale(${scale})`;
+      if (showStack) {
+        // The Stack is a true ordered list. Keep its touch targets full-size and
+        // constrain the panel to the visible viewport; only the row list scrolls.
+        effectsMenu.classList.add('mobile-stack-mode');
+        effectsMenu.style.maxHeight = `${availableHeight}px`;
+        effectsMenu.style.overflow = 'hidden';
+        effectsMenu.style.transform = 'translateX(-50%) scale(1)';
+      } else {
+        effectsMenu.classList.remove('mobile-stack-mode');
+        effectsMenu.style.maxHeight = 'none';
+        effectsMenu.style.overflow = 'visible';
+        effectsMenu.style.transform = 'translateX(-50%) scale(1)';
+
+        // Effects remains a compact palette: scale the whole panel only when
+        // necessary so all groups remain visible without an inner scrollbar.
+        const rect = effectsMenu.getBoundingClientRect();
+        const scale = Math.min(1, availableHeight / Math.max(1, rect.height), availableWidth / Math.max(1, rect.width));
+        effectsMenu.style.transform = `translateX(-50%) scale(${scale})`;
+      }
     } else {
+      effectsMenu.classList.remove('mobile-stack-mode');
       effectsMenu.style.position = '';
       effectsMenu.style.left = '';
       effectsMenu.style.right = '';
@@ -998,12 +1010,15 @@
     saveBrushState();
   });
 
-  document.getElementById('clearAllEffectsBtn').addEventListener('click', () => {
+  function disableAllEffects() {
     const next = cloneEffectStack(app.state.effectStack).map(entry => ({ ...entry, enabled: false }));
     setEffectStack(next, false, false);
     record('effect-stack', { effectStack: cloneEffectStack(app.state.effectStack), effects: [], enabled: false });
     saveBrushState();
-  });
+  }
+
+  document.getElementById('clearAllEffectsBtn').addEventListener('click', disableAllEffects);
+  document.getElementById('clearStackBtn')?.addEventListener('click', disableAllEffects);
 
   function activateColorButton(btn, color) {
     const parsed = parseCssColor(color) || color;
