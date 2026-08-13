@@ -1,14 +1,6 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-30SN02B5HP"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', 'G-30SN02B5HP');
-  </script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#ffffff" />
@@ -233,9 +225,9 @@
         </div>
       </div>
       <p>Canvas grew out of a simple paint program I made for a friend’s kid. While watching it in use, I noticed unexpected effects emerging from multitouch gestures and a handful of simple drawing rules.</p>
-      <p>I started following those accidents on purpose. Canvas is the result: a drawing instrument built around surprising interactions between simple sets of rules.</p>
+      <p>I decided to lean into those accidents and turn the idea into a broader creative tool for teens and grown-ups. Canvas is the result: a drawing instrument built around surprising interactions between simple sets of rules.</p>
       <p>If you have issues, questions or other feedback, you can contact me at <a href="mailto:nick@nickspeelman.com">nick@nickspeelman.com</a></p>
-      <p class="about-support">If you enjoy Canvas and want to help keep projects like this free, <a href="/donate/" rel="noopener noreferrer nofollow">you can support the project</a>.</p>
+      <p class="about-support">If you enjoy Canvas and want to help keep projects like this free, <a href="/donate/" rel="noopener noreferrer nofollow">you can support the project</a>. <a href="/privacy/">Privacy &amp; Terms</a> · <a href="#analytics-settings" data-analytics-settings>Analytics settings</a></p>
       <div class="about-footer">
         <span id="appVersion" class="app-version" aria-live="polite">Version …</span>
         <button id="closeAboutBtn" type="button" class="utility">Close</button>
@@ -340,6 +332,19 @@
       });
     })();
   </script>
+  <aside id="analyticsConsent" class="consent-banner" role="dialog" aria-labelledby="consentTitle" aria-describedby="consentText" hidden>
+    <div class="consent-copy">
+      <strong id="consentTitle">Optional analytics</strong>
+      <p id="consentText">Canvas uses Google Analytics to understand how people use the tool. Analytics is optional; no analytics data is sent unless you accept.</p>
+      <a href="/privacy/">Privacy &amp; Terms</a>
+    </div>
+    <div class="consent-actions">
+      <button type="button" class="utility" data-consent-decline>No thanks</button>
+      <button type="button" class="utility" data-consent-accept>Accept analytics</button>
+    </div>
+  </aside>
+
+  <script src="js/consent.js"></script>
   <script src="js/behaviors.js"></script>
   <script src="js/gif-encoder.js"></script>
   <script src="js/app.js"></script>

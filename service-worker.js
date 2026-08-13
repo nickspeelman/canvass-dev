@@ -1,4 +1,4 @@
-const BASE_VERSION = "2.0";
+const BASE_VERSION = "2.0.1";
 
 // The same service worker is deployed to both production and development.
 // Give dev its own visible version label/cache name automatically so releases
@@ -16,6 +16,7 @@ const APP_SHELL = [
   "./index.html",
   "./styles.css",
   "./js/app.js",
+  "./js/consent.js",
   "./js/behaviors.js",
   "./js/gif-encoder.js",
   "./js/pwa.js",
@@ -26,7 +27,8 @@ const APP_SHELL = [
   "./assets/icons/android-chrome-192x192.png",
   "./assets/icons/android-chrome-512x512.png",
   "./assets/icons/site.webmanifest",
-  "./static-pages.css"
+  "./static-pages.css",
+  "./privacy/index.html"
 ];
 
 self.addEventListener("install", event => {
